@@ -17,8 +17,8 @@ pkgbase = omarchy-without-borders
 	depends = wl-clipboard
 	depends = hyprland
 	depends = libnotify
-	optdepends = gum: assistente de configuração interativo
-	optdepends = ufw: liberação automática da porta
+	optdepends = gum: interactive setup wizard
+	optdepends = ufw: open the ports automatically
 	source = omarchy-without-borders-0.1.0.tar.gz::https://github.com/andrebbruno/omarchy-without-borders/archive/v0.1.0.tar.gz
 	sha256sums = be282ab5ef1309c2fd6fd91c219b299b3d900dc729f13bdd4cfd302f2d52a859
 
