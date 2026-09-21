@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "br.andrebruno.owb",
+  "name": "Omarchy Without Borders",
+  "version": "0.1.0",
+  "author": "Andre Bruno",
+  "license": "MIT",
+  "description": "Omarchy Without Borders (Mouse Without Borders) status in the bar: connected machines and who is being controlled.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "omarchy-plugin/Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "Omarchy Without Borders",
+    "description": "Mouse Without Borders connections; click = details, right click = release the cursor.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 5
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (s)",
+        "min": 2,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      }
+    ]
+  }
+}

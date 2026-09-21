@@ -39,6 +39,13 @@ install -Dm644 systemd/owb.socket ~/.config/systemd/user/owb.socket
 owb setup
 ```
 
+Widget da barra do Omarchy (status, máquinas, ações):
+
+```sh
+omarchy plugin add https://github.com/andrebbruno/omarchy-without-borders.git --enable   # manifest.json fica na raiz do repo
+omarchy bar put br.andrebruno.owb --section right
+```
+
 ## No Windows (PowerToys → Mouse Without Borders)
 
 1. Anote a **chave de segurança** (a mesma em todas as máquinas).

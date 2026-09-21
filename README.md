@@ -42,7 +42,7 @@ owb setup
 Omarchy bar widget (status, machines, actions):
 
 ```sh
-omarchy plugin add https://github.com/andrebbruno/omarchy-without-borders --enable   # or copy omarchy-plugin/ to ~/.config/omarchy/plugins/br.andrebruno.owb
+omarchy plugin add https://github.com/andrebbruno/omarchy-without-borders.git --enable   # manifest.json is at the repo root
 omarchy bar put br.andrebruno.owb --section right
 ```
 
