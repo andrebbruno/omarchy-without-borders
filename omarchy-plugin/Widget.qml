@@ -22,6 +22,13 @@ Panel {
   property int uptime: 0
   property bool busy: false
 
+  // i18n: pt-BR if LANG/LC_ALL start with "pt", else English
+  readonly property bool pt: {
+    var l = String(Quickshell.env("LC_ALL") || Quickshell.env("LC_MESSAGES") || Quickshell.env("LANG") || "")
+    return l.toLowerCase().indexOf("pt") === 0
+  }
+  function tr(en, ptbr) { return pt ? ptbr : en }
+
   readonly property int refreshSec: {
     var n = parseInt(String(settings && settings.refreshIntervalSec !== undefined ? settings.refreshIntervalSec : 5), 10)
     return isFinite(n) && n >= 2 ? n : 5
@@ -30,14 +37,14 @@ Panel {
   readonly property color dim: Qt.darker(fg, 1.55)
   readonly property color iconColor: !daemonUp || peers.length === 0 ? Qt.darker(barForeground, 1.7)
     : (controlling !== "" ? Color.accent : barForeground)
-  readonly property string statusLine: !daemonUp ? "DAEMON PARADO"
-    : controlling !== "" ? "CONTROLANDO " + controlling.toUpperCase()
-    : peers.length === 0 ? "SEM MÁQUINAS CONECTADAS"
-    : peers.length + (peers.length === 1 ? " MÁQUINA CONECTADA" : " MÁQUINAS CONECTADAS")
-  readonly property string tooltip: !daemonUp ? "Omarchy Without Borders: daemon parado (owb enable)"
-    : controlling !== "" ? "Controlando " + controlling + " — mova o mouse de volta pela borda"
-    : peers.length === 0 ? "Omarchy Without Borders: sem máquinas conectadas"
-    : peers.map(function(p) { return p.name }).join(", ") + (edges.length ? " · bordas: " + edges.join(", ") : "")
+  readonly property string statusLine: !daemonUp ? tr("DAEMON STOPPED", "DAEMON PARADO")
+    : controlling !== "" ? tr("CONTROLLING ", "CONTROLANDO ") + controlling.toUpperCase()
+    : peers.length === 0 ? tr("NO MACHINES CONNECTED", "SEM MÁQUINAS CONECTADAS")
+    : peers.length + (peers.length === 1 ? tr(" MACHINE CONNECTED", " MÁQUINA CONECTADA") : tr(" MACHINES CONNECTED", " MÁQUINAS CONECTADAS"))
+  readonly property string tooltip: !daemonUp ? tr("Omarchy Without Borders: daemon stopped (owb enable)", "Omarchy Without Borders: daemon parado (owb enable)")
+    : controlling !== "" ? tr("Controlling ", "Controlando ") + controlling + tr(" — move the mouse back across the edge", " — mova o mouse de volta pela borda")
+    : peers.length === 0 ? tr("Omarchy Without Borders: no machines connected", "Omarchy Without Borders: sem máquinas conectadas")
+    : peers.map(function(p) { return p.name }).join(", ") + (edges.length ? tr(" · edges: ", " · bordas: ") + edges.join(", ") : "")
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -179,7 +186,7 @@ Panel {
         PanelSeparator { width: parent.width; foreground: root.fg }
 
         // ---------- máquinas ----------
-        PanelSectionHeader { text: "MÁQUINAS"; foreground: root.fg; fontFamily: root.bar.fontFamily }
+        PanelSectionHeader { text: root.tr("MACHINES", "MÁQUINAS"); foreground: root.fg; fontFamily: root.bar.fontFamily }
 
         Column {
           width: parent.width
@@ -187,7 +194,7 @@ Panel {
 
           Text {
             visible: root.peers.length === 0
-            text: root.daemonUp ? "Nenhuma conectada. No Windows: mesma chave e esta máquina (" + root.machineName + ") no matrix." : "Inicie o serviço: owb enable"
+            text: root.daemonUp ? root.tr("None connected. On Windows: same key and this machine (" + root.machineName + ") in the matrix.", "Nenhuma conectada. No Windows: mesma chave e esta máquina (" + root.machineName + ") no matrix.") : root.tr("Start the service: owb enable", "Inicie o serviço: owb enable")
             color: root.dim
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.body
@@ -234,7 +241,7 @@ Panel {
           width: parent.width
         }
         Text {
-          text: "Bordas ativas: " + (root.edges.length ? root.edges.join(", ") : "nenhuma") + "   ·   Clipboard: " + (root.clipboardOn ? "on" : "off")
+          text: root.tr("Active edges: ", "Bordas ativas: ") + (root.edges.length ? root.edges.join(", ") : root.tr("none", "nenhuma")) + "   ·   Clipboard: " + (root.clipboardOn ? "on" : "off")
           color: root.dim
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption
@@ -250,15 +257,15 @@ Panel {
           spacing: Style.space(8)
 
           Button {
-            text: "Reconectar"; iconText: ""
-            tooltipText: "Reinicia o serviço (owb restart)"
+            text: root.tr("Reconnect", "Reconectar"); iconText: ""
+            tooltipText: root.tr("Restart the service (owb restart)", "Reinicia o serviço (owb restart)")
             foreground: root.fg; fontFamily: root.bar.fontFamily
             enabled: !root.busy
             onClicked: root.run("owb restart")
           }
           Button {
-            text: "Devolver cursor"; iconText: ""
-            tooltipText: "Sai do modo de controle remoto (owb release)"
+            text: root.tr("Release cursor", "Devolver cursor"); iconText: ""
+            tooltipText: root.tr("Leave remote-control mode (owb release)", "Sai do modo de controle remoto (owb release)")
             foreground: root.fg; fontFamily: root.bar.fontFamily
             enabled: root.controlling !== ""
             onClicked: root.run("owb release")
@@ -269,8 +276,8 @@ Panel {
           spacing: Style.space(8)
 
           Button {
-            text: "Configurar"; iconText: ""
-            tooltipText: "Assistente owb setup"
+            text: root.tr("Configure", "Configurar"); iconText: ""
+            tooltipText: root.tr("owb setup wizard", "Assistente owb setup")
             foreground: root.fg; fontFamily: root.bar.fontFamily
             onClicked: { root.close(); root.run("omarchy-launch-floating-terminal-with-presentation 'owb setup'") }
           }
@@ -282,9 +289,9 @@ Panel {
           }
           Button {
             text: "Status"; iconText: ""
-            tooltipText: "owb status em um terminal"
+            tooltipText: root.tr("owb status in a terminal", "owb status em um terminal")
             foreground: root.fg; fontFamily: root.bar.fontFamily
-            onClicked: { root.close(); root.run("omarchy-launch-floating-terminal-with-presentation 'owb status; echo; read -p \"Enter para fechar\"'") }
+            onClicked: { root.close(); root.run("omarchy-launch-floating-terminal-with-presentation 'owb status; echo; read -p \"Enter\"'") }
           }
         }
       }

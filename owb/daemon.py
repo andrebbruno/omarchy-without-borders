@@ -23,6 +23,7 @@ import threading
 import time
 
 from . import proto as P
+from .i18n import set_language, t
 from .vk_map import vk_to_keycode
 
 log = logging.getLogger("owb")
@@ -36,8 +37,9 @@ DEFAULT_CONFIG = {
     "peers": [],                  # IPs/hosts das máquinas Windows (conectamos a elas)
     "listen": True,               # aceitar conexões iniciadas pelo Windows em port+1
     "heartbeat_seconds": 30,
-    "keyboard_layout": "br",
+    "keyboard_layout": "us",
     "keyboard_variant": "",
+    "language": "auto",           # "auto" (LANG) | "en" | "pt-BR"
     "crypto": "legacy",           # "legacy" = PowerToys lançado (<= 0.100.x); "salted" = branch main
     "vk_overrides": {},           # {"0xBA": 39} para ajustar tecla a tecla
 }
@@ -173,8 +175,8 @@ class Peer:
             self.d.peer_gone(self)
 
     def _handle(self, pkg: P.Package):
-        t = pkg.type
-        if t == P.PackageType.Handshake:
+        pt = pkg.type
+        if pt == P.PackageType.Handshake:
             ack = P.Package(pkg.buf)
             ack.type = P.PackageType.HandshakeAck
             ack.src = P.ID_NONE
@@ -182,7 +184,7 @@ class Peer:
             ack.invert_machines()
             self.send(ack)
             return
-        if t == P.PackageType.HandshakeAck:
+        if pt == P.PackageType.HandshakeAck:
             if self.trusted:
                 return
             if pkg.machines() == self.my_challenge:
@@ -191,29 +193,29 @@ class Peer:
                 self.remote_name = pkg.machine_name or self.label
                 log.info("[%s] CONFIÁVEL: %s (id=%d)", self.label, self.remote_name, self.remote_id)
                 if not self.d.peer_by_name(self.remote_name):
-                    self.d.notify(f"Conectado a {self.remote_name}", self.label, "low")
+                    self.d.notify(t("d.connected", name=self.remote_name), self.label, "low")
                 self.d.learn(self.remote_name, self.remote_id)
                 self.send_typed(P.PackageType.Heartbeat)
             else:
                 log.error("[%s] ack inválido — chave de segurança diferente", self.label)
-                self.d.notify("Chave de segurança diferente", f"{self.label} rejeitou o handshake", "critical")
+                self.d.notify(t("d.badkey"), t("d.badkey_body", addr=self.label), "critical")
                 raise ConnectionError("ack inválido")
             return
         if not self.trusted:
             return
-        if t in (P.PackageType.Heartbeat, P.PackageType.Heartbeat_ex, P.PackageType.Awake, P.PackageType.Hello):
+        if pt in (P.PackageType.Heartbeat, P.PackageType.Heartbeat_ex, P.PackageType.Awake, P.PackageType.Hello):
             self.d.learn(pkg.machine_name, pkg.src)
-            if t == P.PackageType.Hello:
+            if pt == P.PackageType.Hello:
                 self.send_typed(P.PackageType.Heartbeat)
             return
-        if t in (P.PackageType.Heartbeat_ex_l2,):
+        if pt in (P.PackageType.Heartbeat_ex_l2,):
             self.send_typed(P.PackageType.Heartbeat_ex_l3)
             return
-        if t == P.PackageType.ByeBye:
+        if pt == P.PackageType.ByeBye:
             log.info("[%s] ByeBye de %s", self.label, self.remote_name)
             self.d.events.put(("hide", None))
             return
-        if (t & P.PackageType.Matrix) == P.PackageType.Matrix:
+        if (pt & P.PackageType.Matrix) == P.PackageType.Matrix:
             i = pkg.src
             if 1 <= i <= 4:
                 self.d.matrix[i - 1] = pkg.machine_name
@@ -223,43 +225,43 @@ class Peer:
                     self.d.cfg.data["matrix"] = list(self.d.matrix)
                     self.d.cfg.save()
             return
-        if t == P.PackageType.Mouse:
+        if pt == P.PackageType.Mouse:
             if pkg.des in (self.d.machine_id, P.ID_ALL):
                 self.d.events.put(("mouse", pkg))
                 self.d.wake()
             return
-        if t == P.PackageType.Keyboard:
+        if pt == P.PackageType.Keyboard:
             if pkg.des in (self.d.machine_id, P.ID_ALL):
                 self.d.events.put(("key", pkg))
                 self.d.wake()
             return
-        if t == P.PackageType.HideMouse:
+        if pt == P.PackageType.HideMouse:
             self.d.events.put(("hide", None))
             self.d.wake()
             return
-        if t in (P.PackageType.ClipboardText, P.PackageType.ClipboardImage):
+        if pt in (P.PackageType.ClipboardText, P.PackageType.ClipboardImage):
             if self.clip_buf is None:
                 self.clip_buf = bytearray()
-                self.clip_image = t == P.PackageType.ClipboardImage
+                self.clip_image = pt == P.PackageType.ClipboardImage
             self.clip_buf += pkg.buf[16:64]
             if len(self.clip_buf) > 4 * 1024 * 1024:
                 log.warning("[%s] clipboard recebido grande demais; descartando", self.label)
                 self.clip_buf = None
             return
-        if t == P.PackageType.ClipboardDataEnd:
+        if pt == P.PackageType.ClipboardDataEnd:
             if self.clip_buf is not None:
                 data, image = bytes(self.clip_buf), self.clip_image
                 self.clip_buf = None
                 self.d.clipboard_received(self.remote_name, data, image)
             return
-        if t == P.PackageType.Clipboard:
+        if pt == P.PackageType.Clipboard:
             log.info("[%s] %s tem clipboard grande (>1 MB) — não suportado ainda", self.label, self.remote_name)
             return
-        if t in (P.PackageType.ClipboardCapture, P.PackageType.ClipboardAsk,
+        if pt in (P.PackageType.ClipboardCapture, P.PackageType.ClipboardAsk,
                  P.PackageType.MachineSwitched, P.PackageType.NextMachine, P.PackageType.Hi):
-            log.debug("[%s] pacote %s ignorado (fase 1)", self.label, P.PackageType(t).name)
+            log.debug("[%s] pacote %s ignorado (fase 1)", self.label, P.PackageType(pt).name)
             return
-        log.debug("[%s] tipo desconhecido %d", self.label, t)
+        log.debug("[%s] tipo desconhecido %d", self.label, pt)
 
 
 class Daemon:
@@ -291,7 +293,7 @@ class Daemon:
             return
         try:
             import subprocess
-            subprocess.Popen(["notify-send", "-a", "Omarchy Without Borders", "-u", urgency, title, body],
+            subprocess.Popen(["notify-send", "-a", t("d.appname"), "-u", urgency, title, body],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError:
             pass
@@ -563,7 +565,7 @@ class Daemon:
         if time.monotonic() < getattr(self, "clip_suppress_until", 0):
             return
         types = C.get_types()
-        if any(t.startswith("text/") for t in types):
+        if any(mt.startswith("text/") for mt in types):
             txt = C.get_text()
             if not txt:
                 return
@@ -673,7 +675,7 @@ class Daemon:
         except OSError as e:
             log.warning("falha ao iniciar controle de %s: %s", target.remote_name, e)
         log.info("controlando %s (borda %s, y=%.0f)", target.remote_name, edge, y)
-        self.notify(f"Controlando {target.remote_name}", "mova o mouse de volta pela borda para retornar", "low")
+        self.notify(t("d.controlling", name=target.remote_name), t("d.controlling_body"), "low")
 
     def _host_return(self):
         h = self.host
@@ -849,6 +851,8 @@ def main(argv=None):
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname).1s %(message)s", datefmt="%H:%M:%S")
     cfg = Config(args.config)
+    if cfg.data.get("language", "auto") != "auto":
+        set_language(cfg.data["language"])
     if len(cfg.key.replace(" ", "")) < 16:
         log.error("chave não configurada — rode: owb setup   (config em %s)", cfg.path)
         sys.exit(2)

@@ -1,83 +1,110 @@
 # Omarchy Without Borders
 
-Cliente Linux/Wayland do **Mouse Without Borders** (PowerToys). Compartilhe mouse, teclado e
-clipboard entre um PC Omarchy/Hyprland e máquinas Windows **sem instalar nada no Windows** além do
-PowerToys original — útil quando o Windows é uma máquina corporativa que não aceita software extra.
+**English** · [Português (Brasil)](README.pt-BR.md)
 
-- Windows → Linux: o Windows controla o Omarchy (mouse absoluto, teclado, roda).
-- Linux → Windows: o Omarchy controla o Windows ao cruzar a borda da tela (captura nativa do Hyprland).
-- Clipboard de texto e imagem PNG nos dois sentidos (até 1 MB, o modo "inline" do MWB).
-- Fala o protocolo nativo do MWB (TCP 15101, AES‑256‑CBC/PBKDF2, mesma chave de segurança).
+A Linux/Wayland client for **Mouse Without Borders** (Microsoft PowerToys). Share mouse, keyboard
+and clipboard between an Omarchy/Hyprland PC and Windows machines **without installing anything on
+Windows** beyond the stock PowerToys — handy when the Windows box is a locked-down corporate laptop.
 
-Compatível com PowerToys 0.9x–0.100.x (cifra "legacy") e com o branch `main` (`crypto: "salted"`).
+- Windows → Linux: Windows drives Omarchy (absolute mouse, keyboard, wheel).
+- Linux → Windows: Omarchy drives Windows when the cursor crosses a screen edge (native Hyprland
+  input capture).
+- Text and PNG clipboard in both directions (MWB's inline mode, up to 1 MB).
+- Speaks the native MWB protocol: TCP 15101, AES‑256‑CBC/PBKDF2, the same security key.
 
-## Requisitos
+Works with PowerToys 0.9x–0.100.x (legacy cipher) and with the `main` branch (`crypto: "salted"`).
 
-- Hyprland ≥ 0.50 (protocolos `zwlr_virtual_pointer_v1`, `zwp_virtual_keyboard_v1`,
-  `hyprland_input_capture_v1`) — o Omarchy 4 já atende.
+## Requirements
+
+- Hyprland ≥ 0.50 (`zwlr_virtual_pointer_v1`, `zwp_virtual_keyboard_v1`,
+  `hyprland_input_capture_v1`) — Omarchy 4 ships all of it.
 - `libei`, `wl-clipboard`, `python-pywayland`, `python-cryptography`, `python-xkbcommon`, `libnotify`.
-- Opcional: `gum` (assistente), `ufw`.
+- Optional: `gum` (setup wizard), `ufw`.
 
-## Instalação
+## Install
 
-Arch/Omarchy (AUR, quando publicado): `yay -S omarchy-without-borders`
+Arch/Omarchy (AUR, once published): `yay -S omarchy-without-borders`
 
 Manual:
 
 ```sh
 sudo pacman -S --needed python-pywayland python-cryptography python-xkbcommon libei wl-clipboard libnotify gum
-pipx install .            # ou: pip install --user .
+pipx install .            # or: pip install --user .
 install -Dm644 systemd/owb.service ~/.config/systemd/user/owb.service
 owb setup
 ```
 
-## No Windows (PowerToys → Mouse Without Borders)
+Omarchy bar widget (status, machines, actions):
 
-1. Anote a **chave de segurança** (a mesma em todas as máquinas).
-2. Adicione o **nome da máquina Linux** (maiúsculas, ex.: `OMARCHY-VM`) no matrix.
-   O matrix é global: quem aplica configurações retransmite o dele para todas as máquinas — defina‑o
-   uma vez, em qualquer Windows, e não mantenha cópias divergentes.
-3. Se o Windows não resolver o nome do Linux pela rede (LLMNR/mDNS), use **IP address mapping**:
+```sh
+omarchy plugin add https://github.com/andrebbruno/omarchy-without-borders --enable   # or copy omarchy-plugin/ to ~/.config/omarchy/plugins/br.andrebruno.owb
+omarchy bar put br.andrebruno.owb --section right
+```
+
+## On Windows (PowerToys → Mouse Without Borders)
+
+1. Note the **security key** (the same on every machine).
+2. Add the **Linux machine name** (uppercase, e.g. `OMARCHY-VM`) to the matrix.
+   The matrix is global: whichever machine applies settings broadcasts its matrix to all the others —
+   define it once, on any Windows machine, and don't keep diverging copies.
+3. If Windows can't resolve the Linux name (LLMNR/mDNS), use **IP address mapping**:
    `OMARCHY-VM 192.168.x.y`.
-4. Máquinas com firewall corporativo costumam só aceitar conexões **de saída**; nesse caso é o Windows
-   que conecta no Linux (porta 15101 precisa estar liberada aqui) e, após reiniciar o daemon, pode ser
-   preciso `Ctrl+Alt+R` (Reconnect) no Windows.
+4. Corporate laptops usually only allow **outbound** connections; then it is Windows that connects to
+   Linux (port 15101 must be open here) and, after restarting the daemon, you may need
+   `Ctrl+Alt+R` (Reconnect) on Windows.
 
-## Uso
+## Usage
 
 ```
-owb status            conexões, matrix, quem está sendo controlado
-owb test DESKTOP-X    abre o Bloco de Notas na máquina e digita uma frase (teste ponta a ponta)
-owb keys              depuração de mapeamento de teclas
-owb logs -f           log do serviço
-owb release           devolve o cursor se ficou preso controlando outra máquina
+owb status            connections, matrix, who is being controlled
+owb test DESKTOP-X    opens Notepad on that machine and types a sentence (end-to-end test)
+owb keys              key-mapping debug
+owb logs -f           service log
+owb release           give the cursor back if it got stuck controlling another machine
+owb import-keymap F   vk_overrides from a Windows layout export (scripts/export-windows-keymap.ps1)
 ```
 
-Config: `~/.config/owb/config.json` (permissão 600 — contém a chave).
+Config: `~/.config/owb/config.json` (mode 600 — contains the key).
 
-| chave | padrão | |
+| key | default | |
 |---|---|---|
-| `key` | | chave de segurança do MWB |
-| `machine_name` | hostname | nome no matrix |
-| `peers` | `[]` | IPs/hosts Windows a que conectamos (além de aceitar conexões) |
-| `port` | 15100 | porta base; mensagens em porta+1 |
-| `crypto` | `legacy` | `salted` para PowerToys de desenvolvimento |
-| `keyboard_layout` | `br` | layout xkb usado para injetar teclas |
-| `vk_overrides` | `{}` | `{"0xBA": 39}` — ajuste tecla a tecla (VK → keycode evdev) |
+| `key` | | MWB security key |
+| `machine_name` | hostname | name in the matrix |
+| `peers` | `[]` | Windows IPs/hosts we connect to (besides accepting connections) |
+| `port` | 15100 | base port; messages on port+1 |
+| `crypto` | `legacy` | `salted` for PowerToys development builds |
+| `keyboard_layout` | `us` | xkb layout used to inject keys (e.g. `br`) |
+| `vk_overrides` | `{}` | `{"0xBA": 39}` — per-key fix (VK → evdev keycode) |
+| `language` | `auto` | `en` or `pt-BR` for CLI/notifications (`auto` follows `LANG`) |
 | `share_clipboard` | true | |
 | `notifications` | true | |
-| `host_mode` | true | captura nas bordas (Linux controlando Windows) |
-| `matrix` | | último matrix recebido (atualizado automaticamente) |
+| `host_mode` | true | edge capture (Linux driving Windows) |
+| `matrix` | | last matrix received (kept up to date automatically) |
 
-## Limitações conhecidas
+The bar widget follows `LANG` too (pt-BR or English).
 
-- Clipboard > 1 MB e transferência de arquivos (socket 15100 do MWB) ainda não implementados.
-- Matrix em uma linha (esquerda/direita); duas linhas e "circular" não tratados no modo host.
-- Só Hyprland por enquanto (a captura usa `hyprland_input_capture_v1`); GNOME/KDE exigiriam o
-  portal `InputCapture` + libei — mesma biblioteca, outra negociação.
-- A cifra do MWB lançado usa IV fixo (decisão do MWB, não nossa); use uma chave forte.
+## Known limitations
 
-## Licença
+- Clipboard > 1 MB and file transfer (MWB's port‑15100 socket) are not implemented yet.
+- One-row matrix (left/right); two-row and "wrap around" are not handled in host mode.
+- Hyprland only for now (capture uses `hyprland_input_capture_v1`); GNOME/KDE would need the
+  `InputCapture` portal + libei — same library, different negotiation.
+- The released MWB cipher uses a fixed IV (MWB's decision, not ours); use a strong key.
 
-MIT. A compatibilidade de protocolo foi derivada do código do PowerToys (Microsoft, MIT).
-Não é um produto da Microsoft.
+## How it works
+
+The daemon (`owb run`) keeps one encrypted TCP connection per Windows machine, answers the MWB
+handshake with the shared key, and:
+
+- injects incoming `Mouse`/`Keyboard` packets through the compositor's virtual pointer/keyboard;
+- registers screen-edge barriers with `hyprland_input_capture_v1`; when the cursor crosses one, the
+  compositor hands input over an EIS (libei) socket, which is translated to MWB packets with a
+  virtual cursor, until it crosses back;
+- watches the local clipboard (`wl-paste --watch`) and applies remote clipboard data (`wl-copy`).
+
+Everything else (matrix, machine names, hotkeys) is decided by the Windows side, as in MWB.
+
+## License
+
+MIT. Protocol compatibility was derived from the PowerToys source (Microsoft, MIT).
+Not a Microsoft product.
