@@ -68,6 +68,7 @@ owb test DESKTOP-X    abre o Bloco de Notas na máquina e digita uma frase (test
 owb keys              depuração de mapeamento de teclas
 owb logs -f           log do serviço
 owb release           devolve o cursor se ficou preso controlando outra máquina
+owb matrix A B C      define a ordem das máquinas em todas elas (--two-rows, --wrap; "-" = vaga vazia)
 owb restart           reinicia o serviço (as portas ficam abertas pelo owb.socket, e o Windows reconecta)
 ```
 
@@ -92,10 +93,11 @@ Config: `~/.config/owb/config.json` (permissão 600 — contém a chave).
 
 - Clipboard grande/arquivos são buscados *quando você troca de máquina* (é assim que o MWB
   funciona: quem copiou só avisa, e a máquina para onde você vai busca em até 30 s).
-- No *modo serviço* do PowerToys ("Use Service" ligado), o helper do Windows não entregou ao MWB
-  imagens, textos acima de algumas centenas de KB nem listas de arquivos nos nossos testes; nesse
-  modo nada grande chega do Windows — texto pequeno funciona, e tudo no sentido Linux → Windows
-  funciona. O caminho de recepção foi validado com `tests/fake_mwb.py`, que fala o mesmo protocolo.
+- O *modo serviço* do PowerToys ("Use Service" nas opções do MWB, necessário só para controlar a
+  tela de bloqueio/UAC do Windows) quebra o clipboard do próprio MWB para imagens, textos acima de
+  algumas centenas de KB e arquivos — nada grande sai do Windows, nem para outro Windows. Com ele
+  **desligado**, imagens, textos grandes e arquivos do Windows chegam aqui (validado com o
+  PowerToys 0.100.2).
 - Só Hyprland por enquanto (a captura usa `hyprland_input_capture_v1`); GNOME/KDE exigiriam o
   portal `InputCapture` + libei — mesma biblioteca, outra negociação.
 - A cifra do MWB lançado usa IV fixo (decisão do MWB, não nossa); use uma chave forte.

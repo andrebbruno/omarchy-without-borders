@@ -68,6 +68,7 @@ owb test DESKTOP-X    opens Notepad on that machine and types a sentence (end-to
 owb keys              key-mapping debug
 owb logs -f           service log
 owb release           give the cursor back if it got stuck controlling another machine
+owb matrix A B C      set the machine order on every machine (--two-rows, --wrap; "-" = empty slot)
 owb restart           restart the service (ports stay open through owb.socket, so Windows re-dials)
 owb import-keymap F   vk_overrides from a Windows layout export (scripts/export-windows-keymap.ps1)
 ```
@@ -95,10 +96,10 @@ The bar widget follows `LANG` too (pt-BR or English).
 
 - Big clipboard/file transfers are fetched *when you switch machines* (that's how MWB works: the
   owner only announces, and the machine you move to pulls within 30 s).
-- In PowerToys' *service mode* ("Use Service" on), the Windows helper did not hand images, texts
-  over a few hundred KB or file lists to MWB in our tests, so nothing big arrives from Windows in
-  that mode — small text works, and every direction Linux → Windows works. The receive path was
-  validated with `tests/fake_mwb.py`, which speaks the same protocol.
+- PowerToys' *service mode* ("Use Service" in the MWB settings, needed only to control the
+  Windows lock screen/UAC prompts) breaks MWB's own clipboard for images, texts over a few hundred
+  KB and files — nothing big leaves Windows, even to another Windows. With it **off**, images, big
+  texts and files from Windows all arrive here (validated with PowerToys 0.100.2).
 - Hyprland only for now (capture uses `hyprland_input_capture_v1`); GNOME/KDE would need the
   `InputCapture` portal + libei — same library, different negotiation.
 - The released MWB cipher uses a fixed IV (MWB's decision, not ours); use a strong key.
