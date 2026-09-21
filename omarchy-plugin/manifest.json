@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "br.andrebruno.owb",
+  "name": "Omarchy Without Borders",
+  "version": "0.1.0",
+  "author": "Andre Bruno",
+  "license": "MIT",
+  "description": "Status do Omarchy Without Borders (Mouse Without Borders) na barra: máquinas conectadas e quem está sendo controlado.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Widget.qml" },
+  "barWidget": {
+    "displayName": "Omarchy Without Borders",
+    "description": "Conexões do Mouse Without Borders; clique = detalhes, botão direito = devolver o cursor.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": { "refreshIntervalSec": 5 },
+    "schema": [
+      { "key": "refreshIntervalSec", "type": "integer", "label": "Intervalo de atualização (s)", "min": 2, "max": 60, "step": 1, "defaultValue": 5 }
+    ]
+  }
+}

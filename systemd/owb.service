@@ -1,0 +1,15 @@
+[Unit]
+Description=Omarchy Without Borders (Mouse Without Borders client)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/owb run
+Restart=on-failure
+RestartSec=3
+# o daemon precisa do Wayland/Hyprland da sessão; o uwsm do Omarchy exporta essas variáveis
+# para o systemd --user; em outras sessões: systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE
+
+[Install]
+WantedBy=graphical-session.target
