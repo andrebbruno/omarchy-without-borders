@@ -27,10 +27,10 @@ import enum
 
 from pywayland.protocol_core import Argument, ArgumentType, Global, Interface, Proxy, Resource
 
-from .wayland import WlOutput
-from .wayland import WlOutputProxy
-from .wayland import WlSeat
-from .wayland import WlSeatProxy
+from pywayland.protocol.wayland import WlOutput
+from pywayland.protocol.wayland import WlOutputProxy
+from pywayland.protocol.wayland import WlSeat
+from pywayland.protocol.wayland import WlSeatProxy
 
 
 class ZwlrVirtualPointerManagerV1(Interface):

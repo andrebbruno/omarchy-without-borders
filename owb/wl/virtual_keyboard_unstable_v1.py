@@ -30,8 +30,8 @@ import enum
 
 from pywayland.protocol_core import Argument, ArgumentType, Global, Interface, Proxy, Resource
 
-from .wayland import WlSeat
-from .wayland import WlSeatProxy
+from pywayland.protocol.wayland import WlSeat
+from pywayland.protocol.wayland import WlSeatProxy
 
 
 class ZwpVirtualKeyboardManagerV1(Interface):
