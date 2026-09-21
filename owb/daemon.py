@@ -45,6 +45,25 @@ DEFAULT_CONFIG = {
 }
 
 
+def inherited_listeners() -> dict[int, socket.socket]:
+    """Listening sockets passed by systemd socket activation (owb.socket), keyed by port."""
+    out: dict[int, socket.socket] = {}
+    try:
+        if int(os.environ.get("LISTEN_PID", "0")) != os.getpid():
+            return out
+        n = int(os.environ.get("LISTEN_FDS", "0"))
+    except ValueError:
+        return out
+    for fd in range(3, 3 + n):
+        try:
+            sk = socket.socket(fileno=fd)
+            if sk.type == socket.SOCK_STREAM:
+                out[sk.getsockname()[1]] = sk
+        except OSError:
+            continue
+    return out
+
+
 class Config:
     def __init__(self, path: str):
         self.path = os.path.expanduser(path)
@@ -208,8 +227,10 @@ class Peer:
             if pt == P.PackageType.Hello:
                 self.send_typed(P.PackageType.Heartbeat)
             return
-        if pt in (P.PackageType.Heartbeat_ex_l2,):
+        if pt == P.PackageType.Heartbeat_ex_l2:
             self.send_typed(P.PackageType.Heartbeat_ex_l3)
+            return
+        if pt == P.PackageType.Heartbeat_ex_l3:
             return
         if pt == P.PackageType.ByeBye:
             log.info("[%s] ByeBye de %s", self.label, self.remote_name)
@@ -264,10 +285,22 @@ class Peer:
                 self.d.clipboard_received(self.remote_name, data, image)
             return
         if pt == P.PackageType.Clipboard:
-            log.info("[%s] %s tem clipboard grande (>1 MB) — não suportado ainda", self.label, self.remote_name)
+            if self.trusted and self.d.big is not None:
+                self.d.big.beat_received(pkg.src, self.remote_name)
             return
-        if pt in (P.PackageType.ClipboardCapture, P.PackageType.ClipboardAsk,
-                 P.PackageType.MachineSwitched, P.PackageType.NextMachine, P.PackageType.Hi):
+        if pt == P.PackageType.ClipboardAsk:
+            if self.trusted and self.d.big is not None and pkg.des == self.d.machine_id:
+                self.d.big.ask_received(pkg.src, pkg.machine_name or self.remote_name)
+            return
+        if pt == P.PackageType.MachineSwitched:
+            if pkg.des == self.d.machine_id:
+                # Windows now drives us; if we were driving it, drop host mode first
+                self.d.events.put(("switched", None))
+                self.d.wake()
+                if self.d.big is not None:
+                    self.d.big.machine_switched_to_me()
+            return
+        if pt in (P.PackageType.ClipboardCapture, P.PackageType.NextMachine, P.PackageType.Hi):
             log.debug("[%s] pacote %s ignorado (fase 1)", self.label, P.PackageType(pt).name)
             return
         log.debug("[%s] tipo desconhecido %d", self.label, pt)
@@ -286,6 +319,8 @@ class Daemon:
         self.known: dict[str, int] = {}
         self.matrix = list(cfg.data.get("matrix") or ["", "", "", ""])
         self.last_matrix: list[str] = list(self.matrix)
+        self.big = None  # BigClipboard (port 15100) when clipboard sharing is on
+        self.inherited = inherited_listeners()
         self.matrix_two_rows = bool(cfg.data.get("matrix_two_rows", False))
         self.matrix_circle = bool(cfg.data.get("matrix_circle", False))
         self._pkg_id = random.randint(1, 1 << 30)
@@ -369,14 +404,24 @@ class Daemon:
                     log.debug("conexão a %s falhou: %s", host, e)
             time.sleep(5)
 
-    def listener_loop(self):
+    def listen_socket(self, port: int) -> socket.socket:
+        """Dual-stack listener on `port`: inherited from systemd (owb.socket) when available,
+        so the port stays open while the daemon restarts; bound here otherwise."""
+        srv = self.inherited.pop(port, None)
+        if srv is not None:
+            log.info("ouvindo em [::]:%d (socket do systemd)", port)
+            return srv
         # dual-stack: o Windows resolve nosso nome por LLMNR e tenta IPv6 antes do IPv4
         srv = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-        srv.bind(("::", self.cfg.port + 1))
+        srv.bind(("::", port))
         srv.listen(8)
-        log.info("ouvindo em [::]:%d (IPv4+IPv6)", self.cfg.port + 1)
+        log.info("ouvindo em [::]:%d (IPv4+IPv6)", port)
+        return srv
+
+    def listener_loop(self):
+        srv = self.listen_socket(self.cfg.port + 1)
         while True:
             s, addr = srv.accept()
             ip = addr[0].replace("::ffff:", "")
@@ -384,6 +429,15 @@ class Daemon:
             self.add_peer(s, False, ip)
 
     # ---------------------------------------------------------- controle (fase 2, sintético)
+    def trusted_peers_by_name(self) -> dict:
+        """One live trusted connection per machine name (upper-cased keys)."""
+        with self.peers_lock:
+            out = {}
+            for p in self.peers:
+                if p.trusted and p.alive:
+                    out[p.remote_name.upper()] = p
+        return out
+
     def peer_by_name(self, name: str):
         """Conexão confiável mais recente com a máquina (o MWB abre várias; a mais nova é a viva)."""
         with self.peers_lock:
@@ -472,6 +526,23 @@ class Daemon:
                 if cmd == "move":
                     self.send_mouse(peer, int(line[2]), int(line[3]))
                     c.sendall(b"ok\n")
+                elif cmd == "switch":
+                    # 'switch HOST TARGET' -> ask the Windows host to switch to TARGET (NextMachine,
+                    # what Ctrl+Alt+F1..F4 does); TARGET may be the host itself
+                    target = line[2].upper()
+                    tid = self.machine_id if target == self.machine_name.upper() else None
+                    if tid is None:
+                        tid = next((v for k, v in self.known.items() if k.upper() == target), None)
+                    if tid is None:
+                        c.sendall(f"unknown machine {target}\n".encode())
+                        continue
+                    pkg = P.Package()
+                    pkg.type = P.PackageType.NextMachine
+                    pkg.des = peer.remote_id
+                    pkg.id = self.next_id()
+                    pkg.mx, pkg.my, pkg.wheel = 32767, 32767, tid
+                    peer.send(pkg)
+                    c.sendall(b"ok\n")
                 elif cmd == "run":
                     # 'run NOME programa [mensagem...]' -> Win, digita programa, Enter, digita mensagem
                     prog, msg = line[2], " ".join(line[3:])
@@ -537,6 +608,10 @@ class Daemon:
                 inj.key(kc, not up)
         elif kind == "hide":
             inj.release_all()
+        elif kind == "switched":
+            if self.host:
+                log.info("%s switched to us while we were driving it — leaving host mode", self.host["peer"].remote_name)
+                self._host_return()
 
     def status(self) -> dict:
         with self.peers_lock:
@@ -568,13 +643,14 @@ class Daemon:
     def clipboard_received(self, from_name: str, data: bytes, image: bool):
         from . import clipboard as C
         # a mesma máquina costuma ter 2 conexões conosco: ignorar cópia idêntica recente
+        if image:
+            data = data.rstrip(b"\0")  # last-chunk padding (a PNG always ends with the IEND CRC AE426082)
         key = ("image" if image else "text", data)
         if getattr(self, "clip_last", None) == key and time.monotonic() < getattr(self, "clip_suppress_until", 0) + 3:
             return
         try:
             if image:
-                png = data.rstrip(bytes([0]))  # padding do ultimo chunk; decodificadores PNG toleram
-                C.set_image_png(png)
+                C.set_image_png(data)
                 log.info("clipboard <- %s: imagem PNG (%d B)", from_name, len(data))
             else:
                 parts = C.decode_text(data)
@@ -583,8 +659,9 @@ class Daemon:
                     log.info("clipboard <- %s: sem TXT (%s)", from_name, list(parts))
                     return
                 C.set_text(txt)
+                self.clip_last_text = txt
                 log.info("clipboard <- %s: %d chars", from_name, len(txt))
-            self.clip_last = ("image" if image else "text", data)
+            self.clip_last = key
             self.clip_suppress_until = time.monotonic() + 1.5
         except Exception as e:  # noqa: BLE001
             log.warning("clipboard recebido inválido de %s: %s", from_name, e)
@@ -595,10 +672,24 @@ class Daemon:
         if time.monotonic() < getattr(self, "clip_suppress_until", 0):
             return
         types = C.get_types()
+        if "text/uri-list" in types and self.big is not None:
+            files = C.get_uri_list()
+            if len(files) == 1 and os.path.isfile(files[0]):
+                path = files[0]
+                if os.path.getsize(path) > 100 * 1024 * 1024:
+                    log.info("clipboard: %s over 100 MB — not shared", path)
+                    self.notify(t("d.file_too_big"), path, "low")
+                    return
+                if getattr(self, "clip_last", None) == ("file", path):
+                    return
+                self.clip_last = ("file", path)
+                self.big.announce("file", path)
+                return
         if any(mt.startswith("text/") for mt in types):
             txt = C.get_text()
-            if not txt:
-                return
+            if not txt or txt == getattr(self, "clip_last_text", None):
+                return   # empty, or what we just received (compressed bytes differ per compressor)
+            self.clip_last_text = txt
             data, image = C.encode_text(txt), False
             desc = f"{len(txt)} chars"
         elif "image/png" in types:
@@ -611,10 +702,13 @@ class Daemon:
             return
         if getattr(self, "clip_last", None) == (("image" if image else "text"), data):
             return
-        if len(data) > C.MAX_INLINE:
-            log.info("clipboard local > 1 MB — não enviado (limite do modo inline)")
-            return
         self.clip_last = ("image" if image else "text", data)
+        if len(data) > C.MAX_INLINE:
+            if self.big is not None:
+                self.big.announce("image" if image else "text", data)
+            else:
+                log.info("clipboard > 1 MB not sent (big clipboard disabled)")
+            return
         # uma conexão por máquina (ClipboardText não é deduplicado pelo Id no MWB)
         with self.peers_lock:
             by_name = {}
@@ -750,6 +844,8 @@ class Daemon:
         self._cap.release(h["aid"], x, y)
         log.info("voltando para o Omarchy (x=%.0f, y=%.0f)", x, y)
         self.host = None
+        if self.big is not None:
+            self.big.machine_switched_to_me()
 
     def _host_deactivated(self, aid):
         if self.host and self.host["aid"] == aid:
@@ -928,6 +1024,9 @@ def main(argv=None):
     threading.Thread(target=d.heartbeat_loop, name="heartbeat", daemon=True).start()
     threading.Thread(target=d.control_loop, name="control", daemon=True).start()
     if cfg.data.get("share_clipboard", True):
+        from .bigclip import BigClipboard
+        d.big = BigClipboard(d)
+        threading.Thread(target=d.big.server_loop, name="bigclip", daemon=True).start()
         threading.Thread(target=d.clipboard_watch_loop, name="clipwatch", daemon=True).start()
     if args.no_inject:
         while True:

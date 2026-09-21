@@ -8,7 +8,11 @@ PowerToys original — útil quando o Windows é uma máquina corporativa que n�
 
 - Windows → Linux: o Windows controla o Omarchy (mouse absoluto, teclado, roda).
 - Linux → Windows: o Omarchy controla o Windows ao cruzar a borda da tela (captura nativa do Hyprland).
-- Clipboard de texto e imagem PNG nos dois sentidos (até 1 MB, o modo "inline" do MWB).
+- Clipboard nos dois sentidos: texto e imagens PNG de qualquer tamanho, e **arquivos** (até os
+  100 MB do MWB), pelo modo inline do MWB abaixo de 1 MB e pela transferência na porta 15100
+  acima disso. Arquivos recebidos do Windows vão para `~/Downloads/OmarchyWithoutBorders/` e
+  entram no clipboard como `text/uri-list`; um arquivo copiado no Linux aparece no clipboard do
+  Windows como arquivo.
 - Matrix de uma ou duas linhas, circular ou não, exatamente como configurado no Windows.
 - Fala o protocolo nativo do MWB (TCP 15101, AES‑256‑CBC/PBKDF2, mesma chave de segurança).
 
@@ -31,6 +35,7 @@ Manual:
 sudo pacman -S --needed python-pywayland python-cryptography python-xkbcommon libei wl-clipboard libnotify gum
 pipx install .            # ou: pip install --user .
 install -Dm644 systemd/owb.service ~/.config/systemd/user/owb.service
+install -Dm644 systemd/owb.socket ~/.config/systemd/user/owb.socket
 owb setup
 ```
 
@@ -56,6 +61,7 @@ owb test DESKTOP-X    abre o Bloco de Notas na máquina e digita uma frase (test
 owb keys              depuração de mapeamento de teclas
 owb logs -f           log do serviço
 owb release           devolve o cursor se ficou preso controlando outra máquina
+owb restart           reinicia o serviço (as portas ficam abertas pelo owb.socket, e o Windows reconecta)
 ```
 
 Config: `~/.config/owb/config.json` (permissão 600 — contém a chave).
@@ -77,7 +83,12 @@ Config: `~/.config/owb/config.json` (permissão 600 — contém a chave).
 
 ## Limitações conhecidas
 
-- Clipboard > 1 MB e transferência de arquivos (socket 15100 do MWB) ainda não implementados.
+- Clipboard grande/arquivos são buscados *quando você troca de máquina* (é assim que o MWB
+  funciona: quem copiou só avisa, e a máquina para onde você vai busca em até 30 s).
+- No *modo serviço* do PowerToys ("Use Service" ligado), o helper do Windows não entregou ao MWB
+  imagens, textos acima de algumas centenas de KB nem listas de arquivos nos nossos testes; nesse
+  modo nada grande chega do Windows — texto pequeno funciona, e tudo no sentido Linux → Windows
+  funciona. O caminho de recepção foi validado com `tests/fake_mwb.py`, que fala o mesmo protocolo.
 - Só Hyprland por enquanto (a captura usa `hyprland_input_capture_v1`); GNOME/KDE exigiriam o
   portal `InputCapture` + libei — mesma biblioteca, outra negociação.
 - A cifra do MWB lançado usa IV fixo (decisão do MWB, não nossa); use uma chave forte.

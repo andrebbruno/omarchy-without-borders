@@ -1,0 +1,16 @@
+[Unit]
+Description=Omarchy Without Borders listening sockets (held across daemon restarts)
+# PowerToys MWB re-dials a reset connection exactly once, ~1 s after the reset. systemd keeps the
+# ports open while owb.service restarts, so that single attempt lands in the backlog instead of
+# being refused (matters for Windows machines that can only connect outbound).
+
+[Socket]
+ListenStream=[::]:15101
+ListenStream=[::]:15100
+BindIPv6Only=both
+Backlog=16
+NoDelay=true
+Service=owb.service
+
+[Install]
+WantedBy=sockets.target

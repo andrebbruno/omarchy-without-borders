@@ -63,6 +63,28 @@ def set_image_png(png: bytes):
     subprocess.run(["wl-copy", "--type", "image/png"], input=png, env=_env(), check=False)
 
 
+def set_uri_list(paths: list[str]):
+    """Put files on the clipboard (text/uri-list) so file managers can paste them."""
+    data = "\r\n".join("file://" + p for p in paths).encode("utf-8") + b"\r\n"
+    subprocess.run(["wl-copy", "--type", "text/uri-list"], input=data, env=_env(), check=False)
+
+
+def get_uri_list() -> list[str]:
+    """Local file paths on the clipboard (text/uri-list), or []."""
+    from urllib.parse import unquote, urlparse
+    r = subprocess.run(["wl-paste", "--type", "text/uri-list"], capture_output=True, env=_env(), check=False)
+    if r.returncode != 0:
+        return []
+    out = []
+    for line in r.stdout.decode("utf-8", "replace").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            u = urlparse(line)
+            if u.scheme == "file" and u.netloc in ("", "localhost"):
+                out.append(unquote(u.path))
+    return out
+
+
 def get_types() -> list[str]:
     r = subprocess.run(["wl-paste", "--list-types"], capture_output=True, env=_env(), check=False)
     return r.stdout.decode(errors="replace").split()
@@ -79,7 +101,8 @@ def get_image_png() -> bytes | None:
 
 
 WATCH_SCRIPT = r'''#!/bin/sh
-# chamado pelo wl-paste --watch a cada mudança do clipboard; avisa o daemon
-printf 'clipchange\n' | socat -T1 - UNIX-CONNECT:/tmp/mwbd.sock 2>/dev/null || \
-python3 -c 'import socket;s=socket.socket(socket.AF_UNIX);s.connect("/tmp/mwbd.sock");s.sendall(b"clipchange\n")'
+# run by `wl-paste --watch` on every clipboard change; pokes the daemon's control socket
+SOCK="${XDG_RUNTIME_DIR:-/tmp}/owb.sock"
+printf 'clipchange\n' | socat -T1 - UNIX-CONNECT:"$SOCK" 2>/dev/null || \
+python3 -c 'import os,socket;s=socket.socket(socket.AF_UNIX);s.connect(os.environ.get("XDG_RUNTIME_DIR","/tmp")+"/owb.sock");s.sendall(b"clipchange\n")'
 '''

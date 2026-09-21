@@ -67,6 +67,9 @@ _PT = {
     "d.controlling": "Controlling {name}",
     "d.controlling_body": "move the mouse back across the edge to return",
     "d.appname": "Omarchy Without Borders",
+    "d.file_received": "File received from {name}",
+    "d.clip_error": "Clipboard from {name} unavailable",
+    "d.file_too_big": "File not shared (over 100 MB)",
 }
 
 _PT_BR = {
@@ -129,6 +132,9 @@ _PT_BR = {
     "d.controlling": "Controlando {name}",
     "d.controlling_body": "mova o mouse de volta pela borda para retornar",
     "d.appname": "Omarchy Without Borders",
+    "d.file_received": "Arquivo recebido de {name}",
+    "d.clip_error": "Clipboard de {name} indisponível",
+    "d.file_too_big": "Arquivo não compartilhado (maior que 100 MB)",
 }
 
 _TABLES = {"en": _PT, "pt-BR": _PT_BR}

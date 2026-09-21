@@ -14,6 +14,7 @@ from .i18n import t
 CONFIG = os.path.expanduser("~/.config/owb/config.json")
 SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "owb.sock")
 SERVICE = "owb.service"
+SOCKET = "owb.socket"
 
 
 def _ctl(cmd: str, timeout: float = 30) -> str:
@@ -102,8 +103,9 @@ def cmd_setup(_args):
     cfg.setdefault("language", "auto")
     _save(cfg)
     print("\n" + t("cli.setup.saved", path=CONFIG))
-    if _confirm(t("cli.setup.ufw", port=int(port) + 1), True):
-        subprocess.run(["sudo", "ufw", "allow", f"{int(port) + 1}/tcp"])
+    ports = f"{int(port)}:{int(port) + 1}"
+    if _confirm(t("cli.setup.ufw", port=ports), True):
+        subprocess.run(["sudo", "ufw", "allow", f"{ports}/tcp"])
     if _confirm(t("cli.setup.enable"), True):
         cmd_enable(None)
         print(t("cli.setup.hint"))
@@ -179,12 +181,14 @@ def cmd_release(_args):
 
 def cmd_enable(_args):
     subprocess.run(["systemctl", "--user", "daemon-reload"])
+    # the socket unit keeps the ports open while the service restarts (see systemd/owb.socket)
+    subprocess.run(["systemctl", "--user", "enable", "--now", SOCKET], check=False)
     subprocess.run(["systemctl", "--user", "enable", "--now", SERVICE], check=False)
     subprocess.run(["systemctl", "--user", "--no-pager", "status", SERVICE, "-n", "5"], check=False)
 
 
 def cmd_disable(_args):
-    subprocess.run(["systemctl", "--user", "disable", "--now", SERVICE], check=False)
+    subprocess.run(["systemctl", "--user", "disable", "--now", SERVICE, SOCKET], check=False)
 
 
 def cmd_restart(_args):

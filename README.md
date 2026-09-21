@@ -9,7 +9,10 @@ Windows** beyond the stock PowerToys — handy when the Windows box is a locked-
 - Windows → Linux: Windows drives Omarchy (absolute mouse, keyboard, wheel).
 - Linux → Windows: Omarchy drives Windows when the cursor crosses a screen edge (native Hyprland
   input capture).
-- Text and PNG clipboard in both directions (MWB's inline mode, up to 1 MB).
+- Clipboard in both directions: text and PNG images of any size, and **files** (up to MWB's
+  100 MB), using MWB's inline mode below 1 MB and its port‑15100 transfer above it. Files
+  received from Windows land in `~/Downloads/OmarchyWithoutBorders/` and go on the clipboard
+  as `text/uri-list`; a file copied on Linux appears in the Windows clipboard as a file.
 - Matrix with one or two rows, with or without wrap-around, exactly as configured on Windows.
 - Speaks the native MWB protocol: TCP 15101, AES‑256‑CBC/PBKDF2, the same security key.
 
@@ -32,6 +35,7 @@ Manual:
 sudo pacman -S --needed python-pywayland python-cryptography python-xkbcommon libei wl-clipboard libnotify gum
 pipx install .            # or: pip install --user .
 install -Dm644 systemd/owb.service ~/.config/systemd/user/owb.service
+install -Dm644 systemd/owb.socket ~/.config/systemd/user/owb.socket
 owb setup
 ```
 
@@ -64,6 +68,7 @@ owb test DESKTOP-X    opens Notepad on that machine and types a sentence (end-to
 owb keys              key-mapping debug
 owb logs -f           service log
 owb release           give the cursor back if it got stuck controlling another machine
+owb restart           restart the service (ports stay open through owb.socket, so Windows re-dials)
 owb import-keymap F   vk_overrides from a Windows layout export (scripts/export-windows-keymap.ps1)
 ```
 
@@ -88,7 +93,12 @@ The bar widget follows `LANG` too (pt-BR or English).
 
 ## Known limitations
 
-- Clipboard > 1 MB and file transfer (MWB's port‑15100 socket) are not implemented yet.
+- Big clipboard/file transfers are fetched *when you switch machines* (that's how MWB works: the
+  owner only announces, and the machine you move to pulls within 30 s).
+- In PowerToys' *service mode* ("Use Service" on), the Windows helper did not hand images, texts
+  over a few hundred KB or file lists to MWB in our tests, so nothing big arrives from Windows in
+  that mode — small text works, and every direction Linux → Windows works. The receive path was
+  validated with `tests/fake_mwb.py`, which speaks the same protocol.
 - Hyprland only for now (capture uses `hyprland_input_capture_v1`); GNOME/KDE would need the
   `InputCapture` portal + libei — same library, different negotiation.
 - The released MWB cipher uses a fixed IV (MWB's decision, not ours); use a strong key.

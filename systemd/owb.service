@@ -5,6 +5,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
+# sockets come from owb.socket when it is enabled (LISTEN_FDS); otherwise the daemon binds itself
 ExecStart=/usr/bin/owb run
 Restart=on-failure
 RestartSec=3
