@@ -18,6 +18,8 @@ Panel {
   property var edges: []
   property string machineName: ""
   property var matrix: []
+  property bool matrixTwoRows: false
+  property bool matrixCircle: false
   property bool clipboardOn: true
   property int uptime: 0
   property bool busy: false
@@ -89,6 +91,8 @@ Panel {
         root.edges = st.edges || []
         root.machineName = st.machine_name || ""
         root.matrix = st.matrix || []
+        root.matrixTwoRows = !!st.matrix_two_rows
+        root.matrixCircle = !!st.matrix_circle
         root.clipboardOn = !!st.clipboard
         root.uptime = st.uptime_s || 0
       }
@@ -233,7 +237,12 @@ Panel {
         // ---------- matrix ----------
         Text {
           visible: root.matrix.length > 0
-          text: "Matrix: " + root.matrix.filter(function(n) { return n }).map(function(n) { return n.toUpperCase() === root.machineName.toUpperCase() ? "[" + n + "]" : n }).join("  ·  ")
+          text: {
+            var cells = root.matrix.map(function(n) { return !n ? "—" : (n.toUpperCase() === root.machineName.toUpperCase() ? "[" + n + "]" : n) })
+            var tail = root.matrixCircle ? root.tr("  (wraps around)", "  (circular)") : ""
+            if (root.matrixTwoRows) return "Matrix: " + cells.slice(0, 2).join("  ·  ") + tail + "\n            " + cells.slice(2).join("  ·  ")
+            return "Matrix: " + cells.filter(function(c) { return c !== "—" }).join("  ·  ") + tail
+          }
           color: root.dim
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption

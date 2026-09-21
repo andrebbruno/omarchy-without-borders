@@ -10,6 +10,7 @@ Windows** beyond the stock PowerToys — handy when the Windows box is a locked-
 - Linux → Windows: Omarchy drives Windows when the cursor crosses a screen edge (native Hyprland
   input capture).
 - Text and PNG clipboard in both directions (MWB's inline mode, up to 1 MB).
+- Matrix with one or two rows, with or without wrap-around, exactly as configured on Windows.
 - Speaks the native MWB protocol: TCP 15101, AES‑256‑CBC/PBKDF2, the same security key.
 
 Works with PowerToys 0.9x–0.100.x (legacy cipher) and with the `main` branch (`crypto: "salted"`).
@@ -50,8 +51,10 @@ omarchy bar put br.andrebruno.owb --section right
 3. If Windows can't resolve the Linux name (LLMNR/mDNS), use **IP address mapping**:
    `OMARCHY-VM 192.168.x.y`.
 4. Corporate laptops usually only allow **outbound** connections; then it is Windows that connects to
-   Linux (port 15101 must be open here) and, after restarting the daemon, you may need
-   `Ctrl+Alt+R` (Reconnect) on Windows.
+   Linux (port 15101 must be open here). MWB only re-dials a machine by itself after a connection
+   *reset*, when the matrix changes, or when someone connects to it — so the daemon closes its
+   sockets with a reset on restart, and Windows reconnects within a couple of seconds. If it still
+   doesn't, `Ctrl+Alt+R` (Reconnect) on Windows.
 
 ## Usage
 
@@ -86,7 +89,6 @@ The bar widget follows `LANG` too (pt-BR or English).
 ## Known limitations
 
 - Clipboard > 1 MB and file transfer (MWB's port‑15100 socket) are not implemented yet.
-- One-row matrix (left/right); two-row and "wrap around" are not handled in host mode.
 - Hyprland only for now (capture uses `hyprland_input_capture_v1`); GNOME/KDE would need the
   `InputCapture` portal + libei — same library, different negotiation.
 - The released MWB cipher uses a fixed IV (MWB's decision, not ours); use a strong key.

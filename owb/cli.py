@@ -125,7 +125,15 @@ def cmd_status(_args):
         print(f"  {'✔' if p['trusted'] else '…'} {p['name']:<20} {p['addr']:<40} {kind}")
     names = [n or "—" for n in st["matrix"]]
     me = st["machine_name"].upper()
-    print(t("cli.status.matrix") + " | ".join(f"[{n}]" if n.upper() == me else n for n in names))
+    cells = [f"[{n}]" if n.upper() == me else n for n in names]
+    layout = t("cli.status.two_rows") if st.get("matrix_two_rows") else t("cli.status.one_row")
+    if st.get("matrix_circle"):
+        layout += t("cli.status.wrap")
+    if st.get("matrix_two_rows"):
+        print(t("cli.status.matrix") + " | ".join(cells[:2]) + f"   ({layout})")
+        print(" " * len(t("cli.status.matrix").strip()) + " " + " | ".join(cells[2:]))
+    else:
+        print(t("cli.status.matrix") + " | ".join(cells) + f"   ({layout})")
     nb = st["neighbours"]
     if nb:
         print(t("cli.status.neighbours") + ", ".join(f"{k}={v}" for k, v in nb.items()))

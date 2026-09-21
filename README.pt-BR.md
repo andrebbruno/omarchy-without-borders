@@ -9,6 +9,7 @@ PowerToys original — útil quando o Windows é uma máquina corporativa que n�
 - Windows → Linux: o Windows controla o Omarchy (mouse absoluto, teclado, roda).
 - Linux → Windows: o Omarchy controla o Windows ao cruzar a borda da tela (captura nativa do Hyprland).
 - Clipboard de texto e imagem PNG nos dois sentidos (até 1 MB, o modo "inline" do MWB).
+- Matrix de uma ou duas linhas, circular ou não, exatamente como configurado no Windows.
 - Fala o protocolo nativo do MWB (TCP 15101, AES‑256‑CBC/PBKDF2, mesma chave de segurança).
 
 Compatível com PowerToys 0.9x–0.100.x (cifra "legacy") e com o branch `main` (`crypto: "salted"`).
@@ -42,8 +43,10 @@ owb setup
 3. Se o Windows não resolver o nome do Linux pela rede (LLMNR/mDNS), use **IP address mapping**:
    `OMARCHY-VM 192.168.x.y`.
 4. Máquinas com firewall corporativo costumam só aceitar conexões **de saída**; nesse caso é o Windows
-   que conecta no Linux (porta 15101 precisa estar liberada aqui) e, após reiniciar o daemon, pode ser
-   preciso `Ctrl+Alt+R` (Reconnect) no Windows.
+   que conecta no Linux (porta 15101 precisa estar liberada aqui). O MWB só redisca uma máquina sozinho
+   depois de um *reset* de conexão, quando o matrix muda ou quando alguém conecta nele — por isso o
+   daemon fecha os sockets com reset ao reiniciar, e o Windows reconecta em um ou dois segundos. Se
+   mesmo assim não reconectar, `Ctrl+Alt+R` (Reconnect) no Windows.
 
 ## Uso
 
@@ -75,7 +78,6 @@ Config: `~/.config/owb/config.json` (permissão 600 — contém a chave).
 ## Limitações conhecidas
 
 - Clipboard > 1 MB e transferência de arquivos (socket 15100 do MWB) ainda não implementados.
-- Matrix em uma linha (esquerda/direita); duas linhas e "circular" não tratados no modo host.
 - Só Hyprland por enquanto (a captura usa `hyprland_input_capture_v1`); GNOME/KDE exigiriam o
   portal `InputCapture` + libei — mesma biblioteca, outra negociação.
 - A cifra do MWB lançado usa IV fixo (decisão do MWB, não nossa); use uma chave forte.

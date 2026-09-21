@@ -15,6 +15,16 @@ EDGES = ("left", "right", "top", "bottom")
 BARRIER_ID = {"left": 1, "right": 2, "top": 3, "bottom": 4}
 
 
+def cursor_pos() -> tuple[float, float] | None:
+    """Logical cursor position from hyprctl, or None if unavailable."""
+    try:
+        out = subprocess.run(["hyprctl", "cursorpos"], capture_output=True, text=True, check=True, timeout=2).stdout
+        x, y = out.strip().split(",")
+        return float(x), float(y)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
 def monitor_geometry() -> tuple[int, int, int, int]:
     """(x, y, largura, altura) lógicos do monitor focado (hyprctl)."""
     out = subprocess.run(["hyprctl", "-j", "monitors"], capture_output=True, text=True, check=True).stdout
@@ -32,15 +42,32 @@ class InputCapture:
         self.session.dispatcher["eis_fd"] = lambda s, fd: on_eis_fd(fd)
         self.session.dispatcher["activated"] = self._activated
         self.session.dispatcher["deactivated"] = lambda s, aid: on_deactivated(aid)
-        self.session.dispatcher["disabled"] = lambda s: log.info("sessão de captura desabilitada pelo compositor")
+        # also sent as the reply to our own disable() while re-registering barriers
+        self.session.dispatcher["disabled"] = lambda s: log.debug("capture session disabled by the compositor")
         self._on_activated = on_activated
         self.edges: set[str] = set()
         self.geom = (0, 0, 0, 0)
         self.enabled = False
+        # Hyprland (<= 0.56 at least) puts raw pixel values into the wl_fixed args of
+        # `activated`/`release` (no x256 scaling), so what we receive is px/256 and what we
+        # send must be px/256. Detected at each activation against hyprctl, so a fixed
+        # compositor keeps working.
+        self.fixed_scale = 256.0
 
     def _activated(self, s, activation_id, x, y, barrier_id):
         edge = next((e for e, i in BARRIER_ID.items() if i == barrier_id), "?")
-        self._on_activated(activation_id, float(x), float(y), edge)
+        x, y = float(x), float(y)
+        real = cursor_pos()
+        if real is not None:
+            rx, ry = real
+            if abs(x * 256 - rx) <= 2 and abs(y * 256 - ry) <= 2:
+                self.fixed_scale = 256.0
+            elif abs(x - rx) <= 2 and abs(y - ry) <= 2:
+                self.fixed_scale = 1.0
+            x, y = rx, ry
+        else:
+            x, y = x * self.fixed_scale, y * self.fixed_scale
+        self._on_activated(activation_id, x, y, edge)
 
     def set_edges(self, edges: set[str]):
         """(Re)define as barreiras: uma por borda que tem vizinho conectado."""
@@ -72,4 +99,5 @@ class InputCapture:
         log.info("captura ativa nas bordas %s (tela %dx%d)", sorted(edges), w, h)
 
     def release(self, activation_id: int, x: float, y: float):
-        self.session.release(activation_id, x, y)
+        """Stop capturing and warp the cursor to logical (x, y)."""
+        self.session.release(activation_id, x / self.fixed_scale, y / self.fixed_scale)

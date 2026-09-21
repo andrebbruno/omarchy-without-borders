@@ -219,11 +219,20 @@ class Peer:
             i = pkg.src
             if 1 <= i <= 4:
                 self.d.matrix[i - 1] = pkg.machine_name
-                if i == 4 and self.d.matrix != self.d.last_matrix:
-                    self.d.last_matrix = list(self.d.matrix)
-                    log.info("matrix do host %s: %s", self.remote_name, self.d.matrix)
-                    self.d.cfg.data["matrix"] = list(self.d.matrix)
-                    self.d.cfg.save()
+                if i == 4:
+                    # flags travel with the 4th slot, like MWB's UpdateMachineMatrix
+                    two_rows = bool(pt & P.PackageType.MatrixTwoRowFlag)
+                    circle = bool(pt & P.PackageType.MatrixSwapFlag)
+                    changed = (self.d.matrix != self.d.last_matrix or two_rows != self.d.matrix_two_rows
+                               or circle != self.d.matrix_circle)
+                    self.d.matrix_two_rows, self.d.matrix_circle = two_rows, circle
+                    if changed:
+                        self.d.last_matrix = list(self.d.matrix)
+                        log.info("matrix from %s: %s (rows=%d, wrap=%s)", self.remote_name, self.d.matrix,
+                                 2 if two_rows else 1, circle)
+                        self.d.cfg.data.update({"matrix": list(self.d.matrix), "matrix_two_rows": two_rows,
+                                                "matrix_circle": circle})
+                        self.d.cfg.save()
             return
         if pt == P.PackageType.Mouse:
             if pkg.des in (self.d.machine_id, P.ID_ALL):
@@ -277,6 +286,8 @@ class Daemon:
         self.known: dict[str, int] = {}
         self.matrix = list(cfg.data.get("matrix") or ["", "", "", ""])
         self.last_matrix: list[str] = list(self.matrix)
+        self.matrix_two_rows = bool(cfg.data.get("matrix_two_rows", False))
+        self.matrix_circle = bool(cfg.data.get("matrix_circle", False))
         self._pkg_id = random.randint(1, 1 << 30)
         self.started = time.monotonic()
         self._id_lock = threading.Lock()
@@ -317,6 +328,23 @@ class Daemon:
         with self.peers_lock:
             self.peers.append(p)
         threading.Thread(target=p.run, name=f"peer-{label}", daemon=True).start()
+
+    def close_peers_with_reset(self):
+        """Close every peer socket with an RST instead of a FIN.
+
+        MWB only re-dials a machine on its own after a WSAECONNRESET (one retry, ~30 s of
+        attempts); a graceful close is just "read returned 0" and, unless the matrix changed,
+        it never reconnects until the user presses Ctrl+Alt+R. This matters for machines that
+        can only connect outbound (corporate firewall) — we cannot dial them back.
+        """
+        with self.peers_lock:
+            peers = list(self.peers)
+        for p in peers:
+            try:
+                p.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                p.sock.close()
+            except OSError:
+                pass
 
     def peer_gone(self, p: Peer):
         with self.peers_lock:
@@ -526,6 +554,8 @@ class Daemon:
             "peers": peers,
             "known": self.known,
             "matrix": self.matrix,
+            "matrix_two_rows": self.matrix_two_rows,
+            "matrix_circle": self.matrix_circle,
             "neighbours": nb,
             "edges": sorted(cap.edges) if cap else [],
             "capture": bool(cap and cap.enabled),
@@ -634,15 +664,42 @@ class Daemon:
 
     # -- lado host (fase 2): vizinhos pelo matrix ------------------------------------
     def neighbours(self) -> dict[str, str]:
-        """{'left': nome, 'right': nome} a partir do matrix (uma linha) e do nosso nome."""
-        names = [n for n in self.matrix if n]
+        """{'left'|'right'|'top'|'bottom': name} following MWB's MoveLeft/Right/Up/Down.
+
+        One row: next non-empty *connected* slot in that direction (disconnected machines are
+        skipped, like MWB's LiveMachineMatrix); wrap around when the matrix is circular.
+        Two rows: grid [[0, 1], [2, 3]], no skipping; circular = opposite cell of the same row/column.
+        """
         me = self.machine_name.upper()
-        idx = next((i for i, n in enumerate(names) if n.upper() == me), -1)
-        out = {}
-        if idx > 0:
-            out["left"] = names[idx - 1]
-        if 0 <= idx < len(names) - 1:
-            out["right"] = names[idx + 1]
+        mc = [n or "" for n in self.matrix] + [""] * (4 - len(self.matrix))
+        connected = lambda n: bool(n) and self.peer_by_name(n) is not None  # noqa: E731
+        out: dict[str, str] = {}
+        if not self.matrix_two_rows:
+            names = [n for n in mc if n]
+            idx = next((i for i, n in enumerate(names) if n.upper() == me), -1)
+            if idx < 0:
+                return out
+            order_r = names[idx + 1:] + (names[:idx] if self.matrix_circle else [])
+            order_l = names[:idx][::-1] + (names[idx + 1:][::-1] if self.matrix_circle else [])
+            for edge, order in (("right", order_r), ("left", order_l)):
+                n = next((n for n in order if connected(n)), "")
+                if n:
+                    out[edge] = n
+            return out
+        idx = next((i for i, n in enumerate(mc) if n.upper() == me), -1)
+        if idx < 0:
+            return out
+        row, col = divmod(idx, 2)
+        cand = {"right": (row, 1), "left": (row, 0), "bottom": (1, col), "top": (0, col)}
+        for edge, (r, c) in cand.items():
+            j = r * 2 + c
+            if j == idx:
+                if not self.matrix_circle:
+                    continue
+                # wrap: the opposite cell in the same row/column (MWB's MatrixCircle for two rows)
+                j = (r * 2 + (1 - c)) if edge in ("left", "right") else ((1 - r) * 2 + c)
+            if mc[j] and mc[j].upper() != me:
+                out[edge] = mc[j]
         return out
 
     def refresh_edges(self, cap):
@@ -665,8 +722,10 @@ class Daemon:
             self._cap.release(aid, *back)
             return
         _, _, w, h = self._cap.geom
-        self.host = {"aid": aid, "peer": target, "edge": edge, "w": w, "h": h,
-                     "vx": 0.0 if edge == "right" else float(w), "vy": max(0.0, min(float(h), y)),
+        # the cursor enters the remote screen on the opposite edge, at the same height/column
+        vx = {"right": 0.0, "left": float(w)}.get(edge, max(0.0, min(float(w), x)))
+        vy = {"bottom": 0.0, "top": float(h)}.get(edge, max(0.0, min(float(h), y)))
+        self.host = {"aid": aid, "peer": target, "edge": edge, "w": w, "h": h, "vx": vx, "vy": vy,
                      "scroll_acc": 0.0}
         try:
             target = self._send_safe(target, lambda p: p.send_typed(P.PackageType.MachineSwitched, p.remote_id))
@@ -674,7 +733,7 @@ class Daemon:
             self._send_safe(target, lambda p: self.send_mouse(p, int(self.host["vx"] * 65535 / w), int(self.host["vy"] * 65535 / h)))
         except OSError as e:
             log.warning("falha ao iniciar controle de %s: %s", target.remote_name, e)
-        log.info("controlando %s (borda %s, y=%.0f)", target.remote_name, edge, y)
+        log.info("controlando %s (borda %s, x=%.0f, y=%.0f)", target.remote_name, edge, x, y)
         self.notify(t("d.controlling", name=target.remote_name), t("d.controlling_body"), "low")
 
     def _host_return(self):
@@ -685,9 +744,11 @@ class Daemon:
             self._send_safe(h["peer"], lambda p: p.send_typed(P.PackageType.HideMouse, p.remote_id))
         except OSError:
             pass
-        x = 2.0 if h["edge"] == "left" else h["w"] - 2.0
-        self._cap.release(h["aid"], x, h["vy"])
-        log.info("voltando para o Omarchy (x=%.0f, y=%.0f)", x, h["vy"])
+        # re-enter 2 px inside our screen on the edge we left through
+        x, y = {"left": (2.0, h["vy"]), "right": (h["w"] - 2.0, h["vy"]),
+                "top": (h["vx"], 2.0), "bottom": (h["vx"], h["h"] - 2.0)}[h["edge"]]
+        self._cap.release(h["aid"], x, y)
+        log.info("voltando para o Omarchy (x=%.0f, y=%.0f)", x, y)
         self.host = None
 
     def _host_deactivated(self, aid):
@@ -712,12 +773,15 @@ class Daemon:
             for ev in events:
                 if isinstance(ev, Motion):
                     h["vx"] += ev.dx
-                    h["vy"] = max(0.0, min(float(hgt), h["vy"] + ev.dy))
-                    # cruzou a borda de volta para nós?
-                    if (h["edge"] == "right" and h["vx"] < 0) or (h["edge"] == "left" and h["vx"] > w):
+                    h["vy"] += ev.dy
+                    # crossed back over the edge we came through?
+                    e = h["edge"]
+                    if ((e == "right" and h["vx"] < 0) or (e == "left" and h["vx"] > w)
+                            or (e == "bottom" and h["vy"] < 0) or (e == "top" and h["vy"] > hgt)):
                         self._host_return()
                         return
                     h["vx"] = max(0.0, min(float(w), h["vx"]))
+                    h["vy"] = max(0.0, min(float(hgt), h["vy"]))
                     moved = True
                 elif isinstance(ev, Button):
                     if moved:
@@ -801,6 +865,7 @@ class Daemon:
                 inj.flush()
             except Exception:  # noqa: BLE001
                 pass
+            self.close_peers_with_reset()
             os._exit(0)
 
         signal.signal(signal.SIGTERM, _shutdown)

@@ -56,6 +56,8 @@ class PackageType(IntEnum):
     Handshake = 126
     HandshakeAck = 127
     Matrix = 128
+    MatrixSwapFlag = 2       # matrix wraps around (MWB "MatrixCircle")
+    MatrixTwoRowFlag = 4     # 2x2 matrix instead of one row
 
 
 BIG_TYPES = {
