@@ -175,6 +175,21 @@ def cmd_import_keymap(args):
     print(t("cli.import.restart"))
 
 
+def cmd_matrix(args):
+    """owb matrix [--two-rows] [--wrap] NAME1 [NAME2 NAME3 NAME4]  ("-" = empty slot)"""
+    if not args:
+        cmd_status(None)
+        return
+    names = [a for a in args if not a.startswith("--")]
+    bad = [a for a in args if a.startswith("--") and a not in ("--two-rows", "--wrap")]
+    if bad or len(names) > 4:
+        sys.exit(t("cli.matrix.usage"))
+    r = _ctl("matrix " + " ".join(args))
+    n = r.split()[-1] if r.startswith("ok") else "0"
+    print(t("cli.matrix.done", n=n))
+    cmd_status(None)
+
+
 def cmd_release(_args):
     print(_ctl("release"))
 
@@ -203,7 +218,7 @@ def cmd_run(args):
 
 COMMANDS = {
     "setup": cmd_setup, "status": cmd_status, "logs": cmd_logs, "keys": cmd_keys, "test": cmd_test,
-    "release": cmd_release, "import-keymap": cmd_import_keymap,
+    "release": cmd_release, "matrix": cmd_matrix, "import-keymap": cmd_import_keymap,
     "enable": cmd_enable, "disable": cmd_disable, "restart": cmd_restart, "run": cmd_run,
 }
 

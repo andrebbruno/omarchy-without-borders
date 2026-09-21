@@ -15,6 +15,7 @@ _PT = {
   owb keys             debug mode: show every key received/translated
   owb test MACHINE     open Notepad on the Windows machine and type a sentence
   owb release          give the cursor back to Omarchy (if stuck controlling another machine)
+  owb matrix [opts] A B C D   set the machine layout on every machine ("-" = empty slot; --two-rows, --wrap)
   owb import-keymap F  build vk_overrides from a Windows keyboard layout export (scripts/export-windows-keymap.ps1)
   owb enable|disable   enable/disable the systemd user service
   owb restart          restart the service
@@ -50,6 +51,8 @@ _PT = {
     "cli.status.server": "server",
     "cli.status.matrix": "\nmatrix: ",
     "cli.status.neighbours": "neighbours: ",
+    "cli.matrix.usage": "usage: owb matrix [--two-rows] [--wrap] NAME1 [NAME2 NAME3 NAME4]   (\"-\" = empty slot)",
+    "cli.matrix.done": "matrix sent to {n} machine(s); Windows saves it as its own layout",
     "cli.status.one_row": "one row",
     "cli.status.two_rows": "two rows",
     "cli.status.wrap": ", wraps around",
@@ -81,6 +84,7 @@ _PT_BR = {
   owb keys             modo de depuração: mostra cada tecla recebida/traduzida
   owb test MAQUINA     abre o Bloco de Notas na máquina Windows e digita uma frase
   owb release          devolve o cursor ao Omarchy (se ficou preso controlando outra máquina)
+  owb matrix [opts] A B C D   define a ordem das máquinas em todas elas ("-" = vaga vazia; --two-rows, --wrap)
   owb import-keymap F  gera vk_overrides a partir de um layout exportado do Windows (scripts/export-windows-keymap.ps1)
   owb enable|disable   habilita/desabilita o serviço systemd de usuário
   owb restart          reinicia o serviço
@@ -116,6 +120,8 @@ _PT_BR = {
     "cli.status.server": "servidor",
     "cli.status.matrix": "\nmatrix: ",
     "cli.status.neighbours": "vizinhos: ",
+    "cli.matrix.usage": "uso: owb matrix [--two-rows] [--wrap] NOME1 [NOME2 NOME3 NOME4]   (\"-\" = vaga vazia)",
+    "cli.matrix.done": "matrix enviado para {n} máquina(s); o Windows salva como o layout dele",
     "cli.status.one_row": "uma linha",
     "cli.status.two_rows": "duas linhas",
     "cli.status.wrap": ", circular",

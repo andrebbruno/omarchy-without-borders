@@ -429,6 +429,35 @@ class Daemon:
             self.add_peer(s, False, ip)
 
     # ---------------------------------------------------------- controle (fase 2, sintético)
+    def set_matrix(self, names: list[str], two_rows: bool, circle: bool) -> int:
+        """Broadcast a new matrix like MWB's SendMachineMatrix (every machine adopts and saves it)
+        and apply it locally. Returns the number of machines it was sent to."""
+        names = [n.strip().upper()[:32] for n in names][:4]
+        names += [""] * (4 - len(names))
+        ptype = (P.PackageType.Matrix | (P.PackageType.MatrixSwapFlag if circle else 0)
+                 | (P.PackageType.MatrixTwoRowFlag if two_rows else 0))
+        sent = 0
+        for p in self.trusted_peers_by_name().values():
+            try:
+                for i, n in enumerate(names):
+                    pkg = P.Package()
+                    pkg.type = ptype
+                    pkg.src = i + 1          # slot number, as in MWB
+                    pkg.des = P.ID_ALL
+                    pkg.id = self.next_id()
+                    pkg.machine_name = n
+                    p.send(pkg)
+                sent += 1
+            except OSError as e:
+                log.info("matrix -> %s failed: %s", p.remote_name, e)
+        self.matrix = list(names)
+        self.last_matrix = list(names)
+        self.matrix_two_rows, self.matrix_circle = two_rows, circle
+        self.cfg.data.update({"matrix": names, "matrix_two_rows": two_rows, "matrix_circle": circle})
+        self.cfg.save()
+        log.info("matrix set: %s (rows=%d, wrap=%s) -> %d machine(s)", names, 2 if two_rows else 1, circle, sent)
+        return sent
+
     def trusted_peers_by_name(self) -> dict:
         """One live trusted connection per machine name (upper-cased keys)."""
         with self.peers_lock:
@@ -517,6 +546,13 @@ class Daemon:
                 if line[0] == "release":
                     self._host_return()
                     c.sendall(b"ok\n")
+                    continue
+                if line[0] == "matrix":
+                    # 'matrix [--two-rows] [--wrap] NAME1 [NAME2 NAME3 NAME4]' ("-" = empty slot)
+                    flags = [a for a in line[1:] if a.startswith("--")]
+                    names = ["" if a == "-" else a for a in line[1:] if not a.startswith("--")]
+                    n = self.set_matrix(names, "--two-rows" in flags, "--wrap" in flags)
+                    c.sendall(f"ok {n}\n".encode())
                     continue
                 cmd, name = line[0], line[1]
                 peer = self.peer_by_name(name)
