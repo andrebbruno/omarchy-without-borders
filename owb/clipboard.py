@@ -49,6 +49,11 @@ def chunks(data: bytes):
 
 # ---------------------------------------------------------------- lado Linux (wl-clipboard)
 
+# When a compositor has no data-control protocol (GNOME), the portal backend installs an object
+# here with the same methods (see portal.PortalClipboard); the functions below delegate to it.
+impl = None
+
+
 def _env():
     e = dict(os.environ)
     e.setdefault("WAYLAND_DISPLAY", "wayland-1")
@@ -56,15 +61,21 @@ def _env():
 
 
 def set_text(text: str):
+    if impl:
+        return impl.set_text(text)
     subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"), env=_env(), check=False)
 
 
 def set_image_png(png: bytes):
+    if impl:
+        return impl.set_image_png(png)
     subprocess.run(["wl-copy", "--type", "image/png"], input=png, env=_env(), check=False)
 
 
 def set_uri_list(paths: list[str]):
     """Put files on the clipboard (text/uri-list) so file managers can paste them."""
+    if impl:
+        return impl.set_uri_list(paths)
     data = "\r\n".join("file://" + p for p in paths).encode("utf-8") + b"\r\n"
     subprocess.run(["wl-copy", "--type", "text/uri-list"], input=data, env=_env(), check=False)
 
@@ -72,11 +83,15 @@ def set_uri_list(paths: list[str]):
 def get_uri_list() -> list[str]:
     """Local file paths on the clipboard (text/uri-list), or []."""
     from urllib.parse import unquote, urlparse
-    r = subprocess.run(["wl-paste", "--type", "text/uri-list"], capture_output=True, env=_env(), check=False)
-    if r.returncode != 0:
+    if impl:
+        raw = impl.read("text/uri-list")
+    else:
+        r = subprocess.run(["wl-paste", "--type", "text/uri-list"], capture_output=True, env=_env(), check=False)
+        raw = r.stdout if r.returncode == 0 else None
+    if raw is None:
         return []
     out = []
-    for line in r.stdout.decode("utf-8", "replace").splitlines():
+    for line in raw.decode("utf-8", "replace").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
             u = urlparse(line)
@@ -86,16 +101,27 @@ def get_uri_list() -> list[str]:
 
 
 def get_types() -> list[str]:
+    if impl:
+        return impl.get_types()
     r = subprocess.run(["wl-paste", "--list-types"], capture_output=True, env=_env(), check=False)
     return r.stdout.decode(errors="replace").split()
 
 
 def get_text() -> str | None:
+    if impl:
+        raw = None
+        for mt in ("text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT"):
+            raw = impl.read(mt)
+            if raw:
+                break
+        return raw.decode("utf-8", "replace") if raw is not None else None
     r = subprocess.run(["wl-paste", "--no-newline", "--type", "text"], capture_output=True, env=_env(), check=False)
     return r.stdout.decode("utf-8", "replace") if r.returncode == 0 else None
 
 
 def get_image_png() -> bytes | None:
+    if impl:
+        return impl.read("image/png") or None
     r = subprocess.run(["wl-paste", "--type", "image/png"], capture_output=True, env=_env(), check=False)
     return r.stdout if r.returncode == 0 and r.stdout else None
 

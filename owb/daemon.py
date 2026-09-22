@@ -725,7 +725,7 @@ class Daemon:
                 self.clip_last = ("file", path)
                 self.big.announce("file", path)
                 return
-        if any(mt.startswith("text/") for mt in types):
+        if any(mt.startswith("text/") or mt in ("UTF8_STRING", "STRING", "TEXT") for mt in types):
             txt = C.get_text()
             if not txt or txt == getattr(self, "clip_last_text", None):
                 return   # empty, or what we just received (compressed bytes differ per compressor)
@@ -779,6 +779,11 @@ class Daemon:
         """Mantém um wl-paste --watch que avisa o daemon a cada mudança (via socket de controle)."""
         import subprocess
         from . import clipboard as C
+        while getattr(self, "backend", None) is None:   # wait for main_loop to pick the backend
+            time.sleep(0.5)
+        if C.impl is not None:
+            log.info("clipboard: watching through the portal (no wl-paste --watch)")
+            return
         script = os.path.expanduser("~/.config/owb/clipwatch.sh")
         os.makedirs(os.path.dirname(script), exist_ok=True)
         with open(script, "w") as f:
@@ -995,8 +1000,13 @@ class Daemon:
             def save_token(tok):
                 self.cfg.data["portal_restore_token"] = tok
                 self.cfg.save()
-            inj = PortalInjector(self._portal, self.cfg.data.get("portal_restore_token"), save_token)
+            inj = PortalInjector(self._portal, self.cfg.data.get("portal_restore_token"), save_token,
+                                 clipboard=self.cfg.data.get("share_clipboard", True))
             self.backend = "portal"
+            if inj.rd.clipboard is not None:
+                from . import clipboard as C
+                C.impl = inj.rd.clipboard
+                inj.rd.clipboard.on_change = lambda: (self.events.put(("call", self.clipboard_changed)), self.wake())
             if self.cfg.data.get("host_mode", True):
                 try:
                     self._cap = PortalCapture(self._portal, on_fd, self._host_activate, self._host_deactivated)

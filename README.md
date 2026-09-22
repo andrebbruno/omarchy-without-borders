@@ -20,10 +20,19 @@ Works with PowerToys 0.9x–0.100.x (legacy cipher) and with the `main` branch (
 
 ## Requirements
 
-- Hyprland ≥ 0.50 (`zwlr_virtual_pointer_v1`, `zwp_virtual_keyboard_v1`,
-  `hyprland_input_capture_v1`) — Omarchy 4 ships all of it.
-- `libei`, `wl-clipboard`, `python-pywayland`, `python-cryptography`, `python-xkbcommon`, `libnotify`.
-- Optional: `gum` (setup wizard), `ufw`.
+Two backends, picked automatically (`"backend": "auto"` in the config):
+
+- **Hyprland / Omarchy** (`hyprland`): Hyprland ≥ 0.50 (`zwlr_virtual_pointer_v1`,
+  `zwp_virtual_keyboard_v1`, `hyprland_input_capture_v1`) — Omarchy 4 ships all of it.
+  Needs `python-pywayland`, `python-xkbcommon`, `wl-clipboard`.
+- **GNOME, KDE and any desktop with the XDG portals** (`portal`): `org.freedesktop.portal.RemoteDesktop`
+  (injection, via libei), `InputCapture` (screen edges) and `Clipboard`. Needs `python-gobject`
+  (PyGObject). Validated on GNOME 50 (Fedora 44); KDE Plasma ≥ 6.2 ships the same portals but was
+  not tested. GNOME asks for consent: once for remote desktop + clipboard (remembered), and on
+  every daemon start for input capture (its dialog has no "remember" option). The keyboard layout
+  is the desktop's own (`keyboard_layout` is only used by the Hyprland backend).
+
+Both need `libei`, `python-cryptography`, `libnotify`. Optional: `gum` (setup wizard), `ufw`.
 
 ## Install
 
@@ -82,7 +91,8 @@ Config: `~/.config/owb/config.json` (mode 600 — contains the key).
 | `peers` | `[]` | Windows IPs/hosts we connect to (besides accepting connections) |
 | `port` | 15100 | base port; messages on port+1 |
 | `crypto` | `legacy` | `salted` for PowerToys development builds |
-| `keyboard_layout` | `us` | xkb layout used to inject keys (e.g. `br`) |
+| `backend` | `auto` | `hyprland` or `portal` (GNOME/KDE) |
+| `keyboard_layout` | `us` | xkb layout used to inject keys, Hyprland backend only (e.g. `br`) |
 | `vk_overrides` | `{}` | `{"0xBA": 39}` — per-key fix (VK → evdev keycode) |
 | `language` | `auto` | `en` or `pt-BR` for CLI/notifications (`auto` follows `LANG`) |
 | `share_clipboard` | true | |
@@ -100,8 +110,8 @@ The bar widget follows `LANG` too (pt-BR or English).
   Windows lock screen/UAC prompts) breaks MWB's own clipboard for images, texts over a few hundred
   KB and files — nothing big leaves Windows, even to another Windows. With it **off**, images, big
   texts and files from Windows all arrive here (validated with PowerToys 0.100.2).
-- Hyprland only for now (capture uses `hyprland_input_capture_v1`); GNOME/KDE would need the
-  `InputCapture` portal + libei — same library, different negotiation.
+- With the portal backend, `owb matrix` sent from that machine may be ignored by Windows until it
+  has connected back to it (send it from a machine Windows already dialled, or from Windows).
 - The released MWB cipher uses a fixed IV (MWB's decision, not ours); use a strong key.
 
 ## How it works

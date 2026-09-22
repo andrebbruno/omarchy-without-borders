@@ -6,8 +6,9 @@ pkgdesc="Mouse Without Borders (PowerToys) client for Linux/Wayland — share mo
 arch=('any')
 url="https://github.com/andrebbruno/omarchy-without-borders"
 license=('MIT')
-depends=('python' 'python-pywayland' 'python-cryptography' 'python-xkbcommon' 'libei' 'wl-clipboard' 'hyprland' 'libnotify')
-optdepends=('gum: interactive setup wizard' 'ufw: open the ports automatically')
+depends=('python' 'python-cryptography' 'libei' 'libnotify')
+optdepends=('python-pywayland: Hyprland backend' 'python-xkbcommon: Hyprland backend' 'wl-clipboard: Hyprland backend clipboard'
+            'python-gobject: portal backend (GNOME, KDE)' 'gum: interactive setup wizard' 'ufw: open the ports automatically')
 makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('be282ab5ef1309c2fd6fd91c219b299b3d900dc729f13bdd4cfd302f2d52a859')

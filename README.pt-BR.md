@@ -20,10 +20,19 @@ Compatível com PowerToys 0.9x–0.100.x (cifra "legacy") e com o branch `main` 
 
 ## Requisitos
 
-- Hyprland ≥ 0.50 (protocolos `zwlr_virtual_pointer_v1`, `zwp_virtual_keyboard_v1`,
-  `hyprland_input_capture_v1`) — o Omarchy 4 já atende.
-- `libei`, `wl-clipboard`, `python-pywayland`, `python-cryptography`, `python-xkbcommon`, `libnotify`.
-- Opcional: `gum` (assistente), `ufw`.
+Dois backends, escolhidos automaticamente (`"backend": "auto"` na config):
+
+- **Hyprland / Omarchy** (`hyprland`): Hyprland ≥ 0.50 (`zwlr_virtual_pointer_v1`,
+  `zwp_virtual_keyboard_v1`, `hyprland_input_capture_v1`) — o Omarchy 4 já atende.
+  Precisa de `python-pywayland`, `python-xkbcommon`, `wl-clipboard`.
+- **GNOME, KDE e qualquer desktop com os portais XDG** (`portal`): `org.freedesktop.portal.RemoteDesktop`
+  (injeção, via libei), `InputCapture` (bordas da tela) e `Clipboard`. Precisa de `python-gobject`
+  (PyGObject). Validado no GNOME 50 (Fedora 44); o KDE Plasma ≥ 6.2 traz os mesmos portais, mas não
+  foi testado. O GNOME pede consentimento: uma vez para remote desktop + clipboard (lembrado) e a
+  cada início do daemon para captura de entrada (o diálogo dele não tem "lembrar"). O layout de
+  teclado é o do próprio desktop (`keyboard_layout` só vale para o backend Hyprland).
+
+Ambos precisam de `libei`, `python-cryptography`, `libnotify`. Opcional: `gum`, `ufw`.
 
 ## Instalação
 
@@ -81,7 +90,8 @@ Config: `~/.config/owb/config.json` (permissão 600 — contém a chave).
 | `peers` | `[]` | IPs/hosts Windows a que conectamos (além de aceitar conexões) |
 | `port` | 15100 | porta base; mensagens em porta+1 |
 | `crypto` | `legacy` | `salted` para PowerToys de desenvolvimento |
-| `keyboard_layout` | `us` | layout xkb usado para injetar teclas (ex.: `br`) |
+| `backend` | `auto` | `hyprland` ou `portal` (GNOME/KDE) |
+| `keyboard_layout` | `us` | layout xkb usado para injetar teclas, só no backend Hyprland (ex.: `br`) |
 | `language` | `auto` | `en` ou `pt-BR` para CLI/notificações (`auto` segue o `LANG`) |
 | `vk_overrides` | `{}` | `{"0xBA": 39}` — ajuste tecla a tecla (VK → keycode evdev) |
 | `share_clipboard` | true | |
@@ -98,8 +108,8 @@ Config: `~/.config/owb/config.json` (permissão 600 — contém a chave).
   algumas centenas de KB e arquivos — nada grande sai do Windows, nem para outro Windows. Com ele
   **desligado**, imagens, textos grandes e arquivos do Windows chegam aqui (validado com o
   PowerToys 0.100.2).
-- Só Hyprland por enquanto (a captura usa `hyprland_input_capture_v1`); GNOME/KDE exigiriam o
-  portal `InputCapture` + libei — mesma biblioteca, outra negociação.
+- No backend portal, um `owb matrix` enviado daquela máquina pode ser ignorado pelo Windows até ele
+  ter conectado de volta nela (envie de uma máquina que o Windows já discou, ou do Windows).
 - A cifra do MWB lançado usa IV fixo (decisão do MWB, não nossa); use uma chave forte.
 
 ## Licença

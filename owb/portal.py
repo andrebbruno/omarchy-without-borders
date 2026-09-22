@@ -27,6 +27,7 @@ IFACE_RD = "org.freedesktop.portal.RemoteDesktop"
 IFACE_IC = "org.freedesktop.portal.InputCapture"
 IFACE_REQ = "org.freedesktop.portal.Request"
 IFACE_SESSION = "org.freedesktop.portal.Session"
+IFACE_CLIP = "org.freedesktop.portal.Clipboard"
 
 RD_KEYBOARD, RD_POINTER = 1, 2
 IC_KEYBOARD, IC_POINTER = 1, 2
@@ -116,8 +117,9 @@ class RemoteDesktop:
     """Injection session. The first run shows the portal's consent dialog; the restore token
     (persist_mode=2) makes later starts silent."""
 
-    def __init__(self, portal: Portal, restore_token: str | None, on_token):
+    def __init__(self, portal: Portal, restore_token: str | None, on_token, clipboard: bool = True):
         self.p = portal
+        self.clipboard: PortalClipboard | None = None
         tok = portal.session_token()
         out = portal.request(IFACE_RD, "CreateSession", "(a{sv})", {"session_handle_token": GLib.Variant("s", tok)})
         self.session = out["session_handle"]
@@ -125,10 +127,21 @@ class RemoteDesktop:
         if restore_token:
             opts["restore_token"] = GLib.Variant("s", restore_token)
         portal.request(IFACE_RD, "SelectDevices", "(oa{sv})", self.session, opts)
+        if clipboard:
+            try:
+                portal.call(IFACE_CLIP, "RequestClipboard", _variant("(oa{sv})", [self.session, {}]))
+            except PortalError as e:
+                log.info("Clipboard portal not available: %s", e)
+                clipboard = False
         log.info("RemoteDesktop: starting session (a consent dialog may appear the first time)")
         out = portal.request(IFACE_RD, "Start", "(osa{sv})", self.session, "", {})
         if out.get("restore_token"):
             on_token(out["restore_token"])
+        if clipboard and out.get("clipboard_enabled", False):
+            self.clipboard = PortalClipboard(portal, self.session)
+            log.info("clipboard through the portal")
+        elif clipboard:
+            log.info("clipboard not granted by the portal (clipboard_enabled=false)")
         self.fd = portal.call_fd(IFACE_RD, "ConnectToEIS", _variant("(oa{sv})", [self.session, {}]))
         log.info("RemoteDesktop: EIS fd %d", self.fd)
 
@@ -142,9 +155,9 @@ class RemoteDesktop:
 class PortalInjector:
     """Same interface as WaylandInjector, backed by RemoteDesktop + libei sender."""
 
-    def __init__(self, portal: Portal, restore_token: str | None, on_token):
+    def __init__(self, portal: Portal, restore_token: str | None, on_token, clipboard: bool = True):
         from .ei_sender import EiSender
-        self.rd = RemoteDesktop(portal, restore_token, on_token)
+        self.rd = RemoteDesktop(portal, restore_token, on_token, clipboard)
         self.ei = EiSender(self.rd.fd)
         self.capture_mgr = None   # no Hyprland manager here
         # let the compositor announce devices/regions
@@ -192,6 +205,87 @@ class PortalInjector:
     def close(self):
         self.release_all()
         self.rd.close()
+
+
+# ============================================================================ Clipboard
+class PortalClipboard:
+    """org.freedesktop.portal.Clipboard on a RemoteDesktop session: read the selection when its
+    owner changes, and own it (SetSelection + SelectionTransfer/SelectionWrite) when we set it."""
+
+    TEXT_TYPES = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT"]
+
+    def __init__(self, portal: Portal, session: str):
+        self.p = portal
+        self.session = session
+        self.on_change = None            # called (from the GLib thread) when another app copied
+        self.types: list[str] = []
+        self._offer: dict[str, bytes] = {}
+        portal.subscribe(IFACE_CLIP, "SelectionOwnerChanged", self._owner_changed)
+        portal.subscribe(IFACE_CLIP, "SelectionTransfer", self._transfer)
+
+    # ---- incoming
+    def _owner_changed(self, session, opts):
+        log.debug("SelectionOwnerChanged %s %s", session, opts)
+        if session != self.session:
+            return
+        self.types = list(opts.get("mime_types", []))
+        if opts.get("session_is_owner", False):
+            return
+        if self.on_change:
+            self.on_change()
+
+    def get_types(self) -> list[str]:
+        return list(self.types)
+
+    def read(self, mime: str) -> bytes | None:
+        if mime not in self.types:
+            return None
+        try:
+            fd = self.p.call_fd(IFACE_CLIP, "SelectionRead", _variant("(os)", [self.session, mime]))
+        except PortalError as e:
+            log.debug("SelectionRead %s: %s", mime, e)
+            return None
+        with os.fdopen(fd, "rb") as f:
+            return f.read()
+
+    # ---- outgoing
+    def _set(self, offer: dict[str, bytes]):
+        self._offer = offer
+        try:
+            self.p.call(IFACE_CLIP, "SetSelection", _variant("(oa{sv})", [self.session, {
+                "mime_types": GLib.Variant("as", list(offer))}]))
+        except PortalError as e:
+            log.warning("SetSelection: %s", e)
+
+    def set_text(self, text: str):
+        data = text.encode("utf-8")
+        self._set({t: data for t in self.TEXT_TYPES})
+
+    def set_image_png(self, png: bytes):
+        self._set({"image/png": png})
+
+    def set_uri_list(self, paths: list[str]):
+        data = "\r\n".join("file://" + p for p in paths).encode("utf-8") + b"\r\n"
+        self._set({"text/uri-list": data, "text/plain;charset=utf-8": data})
+
+    def _transfer(self, session, mime, serial):
+        # SelectionTransfer(o session, s mime_type, u serial): another app wants our data
+        if session != self.session:
+            return
+        data = self._offer.get(mime)
+        ok = False
+        try:
+            fd = self.p.call_fd(IFACE_CLIP, "SelectionWrite", _variant("(ou)", [self.session, serial]))
+            with os.fdopen(fd, "wb") as f:
+                if data is not None:
+                    f.write(data)
+                    ok = True
+        except (PortalError, OSError) as e:
+            log.warning("SelectionWrite %s: %s", mime, e)
+        try:
+            self.p.call(IFACE_CLIP, "SelectionWriteDone", _variant("(oub)", [self.session, serial, ok]))
+        except PortalError as e:
+            log.debug("SelectionWriteDone: %s", e)
 
 
 # ============================================================================ InputCapture
