@@ -1,6 +1,6 @@
 pkgbase = omarchy-without-borders
 	pkgdesc = Mouse Without Borders (PowerToys) client for Linux/Wayland — share mouse, keyboard and clipboard with Windows
-	pkgver = 0.2.0
+	pkgver = 0.2.1
 	pkgrel = 1
 	url = https://github.com/andrebbruno/omarchy-without-borders
 	arch = any
@@ -19,7 +19,7 @@ pkgbase = omarchy-without-borders
 	optdepends = python-gobject: portal backend (GNOME, KDE)
 	optdepends = gum: interactive setup wizard
 	optdepends = ufw: open the ports automatically
-	source = omarchy-without-borders-0.2.0.tar.gz::https://github.com/andrebbruno/omarchy-without-borders/archive/v0.2.0.tar.gz
-	sha256sums = ceff52059e1f414e1ef66559fc0d40cc0db4936153755faedc8d14f22bf5fb84
+	source = omarchy-without-borders-0.2.1.tar.gz::https://github.com/andrebbruno/omarchy-without-borders/archive/v0.2.1.tar.gz
+	sha256sums = 6eb2601f3da78e5f6929a49588d18b89968877b1d0e6a6de29f7e54e582bd2d0
 
 pkgname = omarchy-without-borders
