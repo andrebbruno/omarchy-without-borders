@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "br.andrebruno.owb",
   "name": "Omarchy Without Borders",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Andre Bruno",
   "license": "MIT",
   "description": "Omarchy Without Borders (Mouse Without Borders) status in the bar: connected machines and who is being controlled.",

@@ -857,8 +857,8 @@ class Daemon:
             log.warning("borda %s ativada sem vizinho conectado — liberando", edge)
             _, _, w, h = self._cap.geom
             # devolver o cursor 2 px para dentro da tela, na mesma altura (evita reativar a barreira)
-            back = {"left": (2.0, y), "right": (w - 2.0, y), "top": (x, 2.0), "bottom": (x, h - 2.0)}[edge]
-            self._cap.release(aid, *back)
+            back = {"left": (2.0, y), "right": (w - 2.0, y), "top": (x, 2.0), "bottom": (x, h - 2.0)}
+            self._cap.release(aid, *back.get(edge, (max(2.0, min(w - 2.0, x)), max(2.0, min(h - 2.0, y)))))
             return
         _, _, w, h = self._cap.geom
         # the cursor enters the remote screen on the opposite edge, at the same height/column

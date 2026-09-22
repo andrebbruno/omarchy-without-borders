@@ -326,10 +326,16 @@ class PortalCapture:
     def _activated(self, session, opts):
         if session != self.session:
             return
+        log.debug("Activated %s", opts)
         aid = opts.get("activation_id", 0)
         x, y = opts.get("cursor_position", (0.0, 0.0))
         bid = opts.get("barrier_id", 0)
-        edge = next((e for e, i in BARRIER_ID.items() if i == bid), "?")
+        edge = next((e for e, i in BARRIER_ID.items() if i == bid), None)
+        if edge is None:
+            # KDE (6.6) omits barrier_id: infer the edge from where the cursor crossed
+            zx, zy, zw, zh = self.geom
+            dist = {"left": x - zx, "right": zx + zw - x, "top": y - zy, "bottom": zy + zh - y}
+            edge = min((e for e in self.edges or dist), key=lambda e: dist[e])
         self.p.post(lambda: self._on_activated(aid, float(x), float(y), edge))
 
     def _deactivated(self, session, opts):

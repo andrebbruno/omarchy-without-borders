@@ -27,9 +27,9 @@ Two backends, picked automatically (`"backend": "auto"` in the config):
   Needs `python-pywayland`, `python-xkbcommon`, `wl-clipboard`.
 - **GNOME, KDE and any desktop with the XDG portals** (`portal`): `org.freedesktop.portal.RemoteDesktop`
   (injection, via libei), `InputCapture` (screen edges) and `Clipboard`. Needs `python-gobject`
-  (PyGObject). Validated on GNOME 50 (Fedora 44); KDE Plasma ≥ 6.2 ships the same portals but was
-  not tested. GNOME asks for consent: once for remote desktop + clipboard (remembered), and on
-  every daemon start for input capture (its dialog has no "remember" option). The keyboard layout
+  (PyGObject). Validated on GNOME 50 and KDE Plasma 6.6 (Fedora 44). Consent dialogs: GNOME asks once
+  for remote desktop + clipboard (remembered) and on every daemon start for input capture (its dialog
+  has no "remember" option); KDE remembers remote control and asks for input capture each start. The keyboard layout
   is the desktop's own (`keyboard_layout` is only used by the Hyprland backend).
 
 Both need `libei`, `python-cryptography`, `libnotify`. Optional: `gum` (setup wizard), `ufw`.
@@ -40,7 +40,7 @@ Arch/Omarchy — package from the [Releases](https://github.com/andrebbruno/omar
 (AUR registration is closed at the moment, so the package is published there):
 
 ```sh
-sudo pacman -U omarchy-without-borders-0.2.0-1-any.pkg.tar.zst
+sudo pacman -U omarchy-without-borders-0.2.1-1-any.pkg.tar.zst
 owb setup
 ```
 
