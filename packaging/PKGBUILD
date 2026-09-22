@@ -11,7 +11,7 @@ optdepends=('python-pywayland: Hyprland backend' 'python-xkbcommon: Hyprland bac
             'python-gobject: portal backend (GNOME, KDE)' 'gum: interactive setup wizard' 'ufw: open the ports automatically')
 makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('be282ab5ef1309c2fd6fd91c219b299b3d900dc729f13bdd4cfd302f2d52a859')
+sha256sums=('ceff52059e1f414e1ef66559fc0d40cc0db4936153755faedc8d14f22bf5fb84')
 
 build() {
   cd "$pkgname-$pkgver"
