@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
     "peers": [],                  # IPs/hosts das máquinas Windows (conectamos a elas)
     "listen": True,               # aceitar conexões iniciadas pelo Windows em port+1
     "heartbeat_seconds": 30,
+    "backend": "auto",            # "hyprland" | "portal" (GNOME/KDE) | "auto"
     "keyboard_layout": "us",
     "keyboard_variant": "",
     "language": "auto",           # "auto" (LANG) | "en" | "pt-BR"
@@ -618,7 +619,7 @@ class Daemon:
     # ---------------------------------------------------------- loop principal (injeção + captura)
     def _handle_incoming(self, inj, kind, pkg, buttons, stats):
         """Pacotes vindos de um host Windows que nos controla (fase 1)."""
-        from .wl_inject import BTN_EXTRA, BTN_SIDE
+        from .evdev import BTN_EXTRA, BTN_SIDE
         if kind == "mouse":
             stats["mouse"] += 1
             f = pkg.mflags
@@ -644,6 +645,8 @@ class Daemon:
                 inj.key(kc, not up)
         elif kind == "hide":
             inj.release_all()
+        elif kind == "call":
+            pkg()
         elif kind == "switched":
             if self.host:
                 log.info("%s switched to us while we were driving it — leaving host mode", self.host["peer"].remote_name)
@@ -673,6 +676,7 @@ class Daemon:
             "controlling": host["peer"].remote_name if host else None,
             "clipboard": bool(self.cfg.data.get("share_clipboard", True)),
             "keyboard_layout": self.cfg.keyboard_layout,
+            "backend": getattr(self, "backend", None),
         }
 
     # -- clipboard --------------------------------------------------------------------
@@ -892,7 +896,7 @@ class Daemon:
         """Eventos EIS enquanto controlamos uma máquina remota."""
         from .ei_receiver import Button, Key, Motion, Scroll
         from .vk_map import keycode_to_vk
-        from .wl_inject import BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE
+        from .evdev import BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE
         h = self.host
         if not h:
             return
@@ -958,18 +962,47 @@ class Daemon:
 
     def main_loop(self):
         import select
-        from .capture import InputCapture
         from .ei_receiver import EiReceiver
-        from .wl_inject import BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, WaylandInjector
-        inj = WaylandInjector(layout=self.cfg.keyboard_layout, variant=self.cfg.keyboard_variant)
-        log.info("injetor Wayland pronto (layout %s)", self.cfg.keyboard_layout)
+        from .evdev import BTN_LEFT, BTN_MIDDLE, BTN_RIGHT
         self.host = None
         self._cap = None
         self._ei = None
-        if inj.capture_mgr is not None and self.cfg.data.get("host_mode", True):
-            def on_fd(fd):
-                self._ei = EiReceiver(fd)
-                log.info("socket EIS recebido (fd=%d)", fd)
+        self._portal = None
+
+        def on_fd(fd):
+            self._ei = EiReceiver(fd)
+            log.info("socket EIS recebido (fd=%d)", fd)
+
+        # backend: "hyprland" = wlr virtual pointer/keyboard + hyprland_input_capture_v1;
+        # "portal" = XDG RemoteDesktop + InputCapture portals (GNOME, KDE); "auto" tries both
+        backend = self.cfg.data.get("backend", "auto")
+        inj = None
+        if backend in ("auto", "hyprland"):
+            try:
+                from .capture import InputCapture
+                from .wl_inject import WaylandInjector
+                inj = WaylandInjector(layout=self.cfg.keyboard_layout, variant=self.cfg.keyboard_variant)
+                self.backend = "hyprland"
+                log.info("injetor Wayland pronto (layout %s)", self.cfg.keyboard_layout)
+            except Exception as e:  # noqa: BLE001
+                if backend == "hyprland":
+                    raise
+                log.info("wlr virtual input unavailable (%s) — trying the XDG portals", e)
+        if inj is None:
+            from .portal import Portal, PortalCapture, PortalInjector
+            self._portal = Portal(post=lambda fn: (self.events.put(("call", fn)), self.wake()))
+
+            def save_token(tok):
+                self.cfg.data["portal_restore_token"] = tok
+                self.cfg.save()
+            inj = PortalInjector(self._portal, self.cfg.data.get("portal_restore_token"), save_token)
+            self.backend = "portal"
+            if self.cfg.data.get("host_mode", True):
+                try:
+                    self._cap = PortalCapture(self._portal, on_fd, self._host_activate, self._host_deactivated)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("InputCapture portal unavailable (%s) — host mode off", e)
+        elif inj.capture_mgr is not None and self.cfg.data.get("host_mode", True):
             self._cap = InputCapture(inj.capture_mgr, on_fd, self._host_activate, self._host_deactivated)
             inj.flush()
         else:

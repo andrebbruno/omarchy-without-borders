@@ -16,7 +16,7 @@ from .wl.hyprland_input_capture_v1 import HyprlandInputCaptureManagerV1
 from .wl.virtual_keyboard_unstable_v1 import ZwpVirtualKeyboardManagerV1
 from .wl.wlr_virtual_pointer_unstable_v1 import ZwlrVirtualPointerManagerV1
 
-BTN_LEFT, BTN_RIGHT, BTN_MIDDLE, BTN_SIDE, BTN_EXTRA = 0x110, 0x111, 0x112, 0x113, 0x114
+from .evdev import BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE  # noqa: F401
 AXIS_V, AXIS_H = 0, 1
 XKB_V1 = 1
 
