@@ -36,7 +36,13 @@ Both need `libei`, `python-cryptography`, `libnotify`. Optional: `gum` (setup wi
 
 ## Install
 
-Arch/Omarchy (AUR, once published): `yay -S omarchy-without-borders`
+Arch/Omarchy — package from the [Releases](https://github.com/andrebbruno/omarchy-without-borders/releases) page
+(AUR registration is closed at the moment, so the package is published there):
+
+```sh
+sudo pacman -U omarchy-without-borders-0.2.0-1-any.pkg.tar.zst
+owb setup
+```
 
 Manual:
 

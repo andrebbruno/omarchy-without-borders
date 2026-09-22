@@ -1,6 +1,6 @@
 # Maintainer: Andre Bruno
 pkgname=omarchy-without-borders
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Mouse Without Borders (PowerToys) client for Linux/Wayland — share mouse, keyboard and clipboard with Windows"
 arch=('any')
